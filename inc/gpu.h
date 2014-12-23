@@ -93,6 +93,7 @@ extern u32 GPU_Regs[0xFFFF];
 #define GLTEXENV 0xC0
 // untill 0x100 with a jump at 0xE0- 0xF0
 
+#define DEPTHTEST_CONFIG 0x107
 #define BUFFERFORMAT 0x117
 
 #define DEPTHBUFFER_ADDRESS 0x11C
@@ -110,6 +111,8 @@ extern u32 GPU_Regs[0xFFFF];
 #define TriangleTopology 0x25e
 
 #define VSresttriangel 0x25f
+
+#define VS_INTUNIFORM_I0 0x2B1 //untill I3 in 0x284
 
 #define VSMainOffset 0x2BA
 #define VSInputRegisterMap 0x2BB

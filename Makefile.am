@@ -1,7 +1,8 @@
 # Makefile.am -- Process this file with automake to produce Makefile.in
 
 SRC_FILES	=	src/mem.c src/screen.c src/handles.c src/loader.c src/utils.c	\
-			src/svc.c src/config.c src/gdb/gdbstubchelper.c src/gdb/gdbstub.c
+			src/svc.c src/config.c src/gdb/gdbstubchelper.c src/gdb/gdbstub.c \
+			src/color.c
 
 ARM11_FILES	=	src/arm11/armsupp.c src/arm11/armemu.c src/arm11/threads.c	\
 			src/arm11/thumbemu.c src/arm11/arminit.c src/arm11/armcopro.c	\
@@ -47,6 +48,7 @@ HTTP_FILES	=	src/http/HTTPClientString.c src/http/HTTPClientWrapper.c src/http/H
 MAIN_FILES	=	src/main.c
 
 noinst_HEADERS	=	inc/3dsx.h			\
+			inc/color.h			\
 			inc/arm11.h			\
 			inc/config.h			\
 			inc/crypto/aes.h		\
