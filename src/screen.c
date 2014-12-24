@@ -21,6 +21,8 @@
 #include "hid_user.h"
 #include "color.h"
 #include <SDL.h>
+#include "arm11.h"
+
 
 SDL_Window *win = NULL;
 SDL_Renderer *renderer = NULL;
@@ -224,7 +226,7 @@ void screen_RenderGPU()
                 SDL_LockSurface(bitmapSurface);
             }
 
-            u8 *bitmapPixels = (u8 *)bitmapSurface->pixels + (240 * 400 * 4);
+            u8 *bitmapPixels = (u8 *)bitmapSurface->pixels +(240 * 400 * 4);
 
             screen_RenderFramebuffer(bitmapPixels, buffer, bottomScreenFormat, 320, 40);
 
@@ -273,6 +275,6 @@ void screen_HandleEvent()
 }
 u32 svcsleep()
 {
-    DEBUG("sleep %08x %08x\n", arm11_R(1),arm11_R(0) );
+    //DEBUG("sleep %08x %08x\n", arm11_R(1),arm11_R(0) );
     return 0;
 }

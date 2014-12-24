@@ -917,8 +917,6 @@ SERVICE_CMD(0x08040000)   // GetSize
     u32 rc = 0;
     u64 sz = 0;
 
-    DEBUG("GetSize\n");
-
     file_type* type = (file_type*)h->subtype;
 
     if (type->fnGetSize != NULL) {
@@ -927,6 +925,8 @@ SERVICE_CMD(0x08040000)   // GetSize
         ERROR("GetSize() not implemented for this type.\n");
         rc = -1;
     }
+
+    DEBUG("GetSize ret=%08X(%d)\n",sz,sz);
 
     RESP(1, rc); // Result
     RESP(2, (u32)sz);
@@ -1003,9 +1003,13 @@ SERVICE_CMD(0x080C0000)   // OpenLinkFile
 
 SERVICE_END();
 
-u32 file_CloseHandle(ARMul_State *state, handleinfo* h)
+u32 file_CloseHandle(ARMul_State *state, u32 handle)
 {
-    DEBUG("file_CloseHandle - STUB\n");
+    DEBUG("file_CloseHandle\n");
+
+    //don't close the file here it is just a handle close
+
+    handle_free(handle);
     return 0;
 }
 
@@ -1049,3 +1053,13 @@ SERVICE_CMD(0x08020000)   // Close
 }
 
 SERVICE_END();
+
+u32 dir_CloseHandle(ARMul_State *state, u32 handle)
+{
+    DEBUG("dir_CloseHandle\n");
+
+    //don't close the dir here it is just a handle close
+
+    handle_free(handle);
+    return 0;
+}

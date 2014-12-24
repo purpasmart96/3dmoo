@@ -107,6 +107,10 @@ void mem_Dbugdump()
     FILE* data = fopen("VRAMdump.bin", "wb");
     fwrite(VRAMbuff, 1, 0x600000, data);
     fclose(data);
+
+    FILE* membuf = fopen("LINEmembuffer.bin", "wb");
+    fwrite(LINEmembuffer, 1, 0x8000000, membuf);
+    fclose(membuf);
 }
 
 static int Overlaps(memmap_t* a, memmap_t* b)
@@ -452,7 +456,7 @@ u32 mem_Read32(uint32_t addr)
     return 0;
 }
 
-int mem_Write(uint8_t* in_buff, uint32_t addr, uint32_t size)
+int mem_Write(const uint8_t* in_buff, uint32_t addr, uint32_t size)
 {
 #ifdef MEM_TRACE
     fprintf(stderr, "w (sz=%08x) %08x\n", size, addr);

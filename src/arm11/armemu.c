@@ -1733,7 +1733,7 @@ mainswitch:
                             op1 *= op2;
                             //printf("SMLA_INST:BB,op1=0x%x, op2=0x%x. Rn=0x%x\n", op1, op2, Rn);
                             if (AddOverflow(op1, Rn, op1 + Rn))
-                                SETS;
+                                SETQ;
                             state->Reg[BITS (16, 19)] = op1 + Rn;
                             break;
                         }
@@ -1745,7 +1745,7 @@ mainswitch:
                             ARMword result = op1 + op2;
                             if (AddOverflow(op1, op2, result)) {
                                 result = POS (result) ? 0x80000000 : 0x7fffffff;
-                                SETS;
+                                SETQ;
                             }
                             state->Reg[BITS (12, 15)] = result;
                             break;
@@ -1858,7 +1858,7 @@ mainswitch:
                                 ARMword Rn = state->Reg[BITS(12, 15)];
 
                                 if (AddOverflow((ARMword)result, Rn, (ARMword)(result + Rn)))
-                                    SETS;
+                                    SETQ;
                                 result += Rn;
                             }
                             state->Reg[BITS (16, 19)] = (ARMword)result;
@@ -1874,7 +1874,7 @@ mainswitch:
                             if (SubOverflow
                                     (op1, op2, result)) {
                                 result = POS (result) ? 0x80000000 : 0x7fffffff;
-                                SETS;
+                                SETQ;
                             }
 
                             state->Reg[BITS (12, 15)] = result;
@@ -1995,15 +1995,14 @@ mainswitch:
                             ARMword op2d = op2 + op2;
                             ARMword result;
 
-                            if (AddOverflow
-                                    (op2, op2, op2d)) {
-                                SETS;
+                            if (AddOverflow(op2, op2, op2d)) {
+                                SETQ;
                                 op2d = POS (op2d) ? 0x80000000 : 0x7fffffff;
                             }
 
                             result = op1 + op2d;
                             if (AddOverflow(op1, op2d, result)) {
-                                SETS;
+                                SETQ;
                                 result = POS (result) ? 0x80000000 : 0x7fffffff;
                             }
 
@@ -2116,13 +2115,13 @@ mainswitch:
                             ARMword result;
 
                             if (AddOverflow(op2, op2, op2d)) {
-                                SETS;
+                                SETQ;
                                 op2d = POS (op2d) ? 0x80000000 : 0x7fffffff;
                             }
 
                             result = op1 - op2d;
                             if (SubOverflow(op1, op2d, result)) {
-                                SETS;
+                                SETQ;
                                 result = POS (result) ? 0x80000000 : 0x7fffffff;
                             }
 
@@ -5927,22 +5926,21 @@ L_stm_s_takeabort:
                 state->Reg[rd_idx] = (lo_result & 0xFFFF) | ((hi_result & 0xFFFF) << 16);
 
                 if (lo_result >= 0) {
-                    state->Cpsr |= (1 << 16);
-                    state->Cpsr |= (1 << 17);
+                    state->GEFlag |= (1 << 16);
+                    state->GEFlag |= (1 << 17);
                 } else {
-                    state->Cpsr &= ~(1 << 16);
-                    state->Cpsr &= ~(1 << 17);
+                    state->GEFlag &= ~(1 << 16);
+                    state->GEFlag &= ~(1 << 17);
                 }
 
                 if (hi_result >= 0) {
-                    state->Cpsr |= (1 << 18);
-                    state->Cpsr |= (1 << 19);
+                    state->GEFlag |= (1 << 18);
+                    state->GEFlag |= (1 << 19);
                 } else {
-                    state->Cpsr &= ~(1 << 18);
-                    state->Cpsr &= ~(1 << 19);
+                    state->GEFlag &= ~(1 << 18);
+                    state->GEFlag &= ~(1 << 19);
                 }
 
-                ARMul_CPSRAltered(state);
                 return 1;
             }
             else if ((instr & 0xFF0) == 0xf90 || (instr & 0xFF0) == 0xff0)
@@ -5966,24 +5964,24 @@ L_stm_s_takeabort:
                     hi_val2 = (u8)(((rn_val >> 24) & 0xFF) + ((rm_val >> 24) & 0xFF));
 
                     if (lo_val1 & 0x80)
-                        state->Cpsr |= (1 << 16);
+                        state->GEFlag |= (1 << 16);
                     else
-                        state->Cpsr &= ~(1 << 16);
+                        state->GEFlag &= ~(1 << 16);
 
                     if (lo_val2 & 0x80)
-                        state->Cpsr |= (1 << 17);
+                        state->GEFlag |= (1 << 17);
                     else
-                        state->Cpsr &= ~(1 << 17);
+                        state->GEFlag &= ~(1 << 17);
 
                     if (hi_val1 & 0x80)
-                        state->Cpsr |= (1 << 18);
+                        state->GEFlag |= (1 << 18);
                     else
-                        state->Cpsr &= ~(1 << 18);
+                        state->GEFlag &= ~(1 << 18);
 
                     if (hi_val2 & 0x80)
-                        state->Cpsr |= (1 << 19);
+                        state->GEFlag |= (1 << 19);
                     else
-                        state->Cpsr &= ~(1 << 19);
+                        state->GEFlag &= ~(1 << 19);
                 }
                 // SSUB8
                 else {
@@ -5993,27 +5991,26 @@ L_stm_s_takeabort:
                     hi_val2 = (u8)(((rn_val >> 24) & 0xFF) - ((rm_val >> 24) & 0xFF));
 
                     if (!(lo_val1 & 0x80))
-                        state->Cpsr |= (1 << 16);
+                        state->GEFlag |= (1 << 16);
                     else
-                        state->Cpsr &= ~(1 << 16);
+                        state->GEFlag &= ~(1 << 16);
 
                     if (!(lo_val2 & 0x80))
-                        state->Cpsr |= (1 << 17);
+                        state->GEFlag |= (1 << 17);
                     else
-                        state->Cpsr &= ~(1 << 17);
+                        state->GEFlag &= ~(1 << 17);
 
                     if (!(hi_val1 & 0x80))
-                        state->Cpsr |= (1 << 18);
+                        state->GEFlag |= (1 << 18);
                     else
-                        state->Cpsr &= ~(1 << 18);
+                        state->GEFlag &= ~(1 << 18);
 
                     if (!(hi_val2 & 0x80))
-                        state->Cpsr |= (1 << 19);
+                        state->GEFlag |= (1 << 19);
                     else
-                        state->Cpsr &= ~(1 << 19);
+                        state->GEFlag &= ~(1 << 19);
                 }
 
-                ARMul_CPSRAltered(state);
                 state->Reg[rd_idx] = (lo_val1 | lo_val2 << 8 | hi_val1 << 16 | hi_val2 << 24);
                 return 1;
             }
@@ -6092,31 +6089,30 @@ L_stm_s_takeabort:
                     h2 = ((u16)(from >> 16) - (u16)(to >> 16));
 
                     if (!(h1 & 0xffff0000))
-                        state->Cpsr |= (3 << 16);
+                        state->GEFlag |= (3 << 16);
                     else
-                        state->Cpsr &= ~(3 << 16);
+                        state->GEFlag &= ~(3 << 16);
 
                     if (!(h2 & 0xffff0000))
-                        state->Cpsr |= (3 << 18);
+                        state->GEFlag |= (3 << 18);
                     else
-                        state->Cpsr &= ~(3 << 18);
+                        state->GEFlag &= ~(3 << 18);
                 }
                 else { // UADD16
                     h1 = ((u16)from + (u16)to);
                     h2 = ((u16)(from >> 16) + (u16)(to >> 16));
 
                     if (h1 & 0xffff0000)
-                        state->Cpsr |= (3 << 16);
+                        state->GEFlag |= (3 << 16);
                     else
-                        state->Cpsr &= ~(3 << 16);
+                        state->GEFlag &= ~(3 << 16);
 
                     if (h2 & 0xffff0000)
-                        state->Cpsr |= (3 << 18);
+                        state->GEFlag |= (3 << 18);
                     else
-                        state->Cpsr &= ~(3 << 18);
+                        state->GEFlag &= ~(3 << 18);
                 }
 
-                ARMul_CPSRAltered(state);
                 state->Reg[rd] = (u32)((h1 & 0xffff) | ((h2 & 0xffff) << 16));
                 return 1;
             }
@@ -6131,24 +6127,24 @@ L_stm_s_takeabort:
                         b4 = ((u8)(from >> 24) - (u8)(to >> 24));
 
                         if (!(b1 & 0xffffff00))
-                            state->Cpsr |= (1 << 16);
+                            state->GEFlag |= (1 << 16);
                         else
-                            state->Cpsr &= ~(1 << 16);
+                            state->GEFlag &= ~(1 << 16);
 
                         if (!(b2 & 0xffffff00))
-                            state->Cpsr |= (1 << 17);
+                            state->GEFlag |= (1 << 17);
                         else
-                            state->Cpsr &= ~(1 << 17);
+                            state->GEFlag &= ~(1 << 17);
 
                         if (!(b3 & 0xffffff00))
-                            state->Cpsr |= (1 << 18);
+                            state->GEFlag |= (1 << 18);
                         else
-                            state->Cpsr &= ~(1 << 18);
+                            state->GEFlag &= ~(1 << 18);
 
                         if (!(b4 & 0xffffff00))
-                            state->Cpsr |= (1 << 19);
+                            state->GEFlag |= (1 << 19);
                         else
-                            state->Cpsr &= ~(1 << 19);
+                            state->GEFlag &= ~(1 << 19);
                     }
                     else { // UADD8
                         b1 = ((u8)from + (u8)to);
@@ -6157,28 +6153,27 @@ L_stm_s_takeabort:
                         b4 = ((u8)(from >> 24) + (u8)(to >> 24));
 
                         if (b1 & 0xffffff00)
-                            state->Cpsr |= (1 << 16);
+                            state->GEFlag |= (1 << 16);
                         else
-                            state->Cpsr &= ~(1 << 16);
+                            state->GEFlag &= ~(1 << 16);
 
                         if (b2 & 0xffffff00)
-                            state->Cpsr |= (1 << 17);
+                            state->GEFlag |= (1 << 17);
                         else
-                            state->Cpsr &= ~(1 << 17);
+                            state->GEFlag &= ~(1 << 17);
 
                         if (b3 & 0xffffff00)
-                            state->Cpsr |= (1 << 18);
+                            state->GEFlag |= (1 << 18);
                         else
-                            state->Cpsr &= ~(1 << 18);
+                            state->GEFlag &= ~(1 << 18);
 
 
                         if (b4 & 0xffffff00)
-                            state->Cpsr |= (1 << 19);
+                            state->GEFlag |= (1 << 19);
                         else
-                            state->Cpsr &= ~(1 << 19);
+                            state->GEFlag &= ~(1 << 19);
                     }
 
-                    ARMul_CPSRAltered(state);
                     state->Reg[rd] = (u32)(b1 | (b2 & 0xff) << 8 | (b3 & 0xff) << 16 | (b4 & 0xff) << 24);
                     return 1;
                 }
@@ -6275,21 +6270,20 @@ L_stm_s_takeabort:
 
 					if (rn_lo > max) {
 						rn_lo = max;
-						state->Cpsr |= (1 << 27);
+						SETQ;
 					} else if (rn_lo < min) {
 						rn_lo = min;
-						state->Cpsr |= (1 << 27);
+						SETQ;
 					}
 
 					if (rn_hi > max) {
 						rn_hi = max;
-						state->Cpsr |= (1 << 27);
+						SETQ;
 					} else if (rn_hi < min) {
 						rn_hi = min;
-						state->Cpsr |= (1 << 27);
+						SETQ;
 					}
 
-					ARMul_CPSRAltered(state);
 					state->Reg[rd_idx] = (rn_lo & 0xFFFF) | ((rn_hi & 0xFFFF) << 16);
 					return 1;
 				}
@@ -6425,21 +6419,20 @@ L_stm_s_takeabort:
 
 					if (rn_lo > max) {
 						rn_lo = max;
-						state->Cpsr |= (1 << 27);
+						SETQ;
 					} else if (rn_lo < 0) {
 						rn_lo = 0;
-						state->Cpsr |= (1 << 27);
+						SETQ;
 					}
 
 					if (rn_hi > max) {
 						rn_hi = max;
-						state->Cpsr |= (1 << 27);
+						SETQ;
 					} else if (rn_hi < 0) {
 						rn_hi = 0;
-						state->Cpsr |= (1 << 27);
+						SETQ;
 					}
 
-					ARMul_CPSRAltered(state);
 					state->Reg[rd_idx] = (rn_lo & 0xFFFF) | ((rn_hi << 16) & 0xFFFF);
 					return 1;
 				}
@@ -6572,8 +6565,39 @@ L_stm_s_takeabort:
                 return 1;
             }
             break;
-        case 0x74:
-            printf ("Unhandled v6 insn: smlald/smlsld\n");
+        case 0x74: // SMLALD and SMLSLD
+            {
+                const u8 rm_idx = BITS(8, 11);
+                const u8 rn_idx = BITS(0, 3);
+                const u8 rdlo_idx = BITS(12, 15);
+                const u8 rdhi_idx = BITS(16, 19);
+                const bool do_swap = (BIT(5) == 1);
+
+                const u32 rdlo_val = state->Reg[rdlo_idx];
+                const u32 rdhi_val = state->Reg[rdhi_idx];
+                const u32 rn_val   = state->Reg[rn_idx];
+                u32 rm_val         = state->Reg[rm_idx];
+
+                if (do_swap)
+                    rm_val = (((rm_val & 0xFFFF) << 16) | (rm_val >> 16));
+
+                const s32 product1 = (s16)(rn_val & 0xFFFF) * (s16)(rm_val & 0xFFFF);
+                const s32 product2 = (s16)((rn_val >> 16) & 0xFFFF) * (s16)((rm_val >> 16) & 0xFFFF);
+                s64 result;
+
+                // SMLALD
+                if (BIT(6) == 0) {
+                    result = (product1 + product2) + (s64)(rdlo_val | ((s64)rdhi_val << 32));
+                }
+                // SMLSLD
+                else {
+                    result = (product1 - product2) + (s64)(rdlo_val | ((s64)rdhi_val << 32));
+                }
+
+                state->Reg[rdlo_idx] = (result & 0xFFFFFFFF);
+                state->Reg[rdhi_idx] = ((result >> 32) & 0xFFFFFFFF);
+                return 1;
+            }
             break;
         case 0x75:
             printf ("Unhandled v6 insn: smmla/smmls/smmul\n");
