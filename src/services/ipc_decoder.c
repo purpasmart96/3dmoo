@@ -22,6 +22,17 @@
 
 #include "service_macros.h"
 
+void IPC_readstruct(u32 addr,u8* buffer)
+{
+    IPC_debugprint(addr);
+    mem_Read(buffer, addr, 0x80); //todo
+}
+void IPC_writestruct(u32 addr, u8* buffer)
+{
+    IPC_debugprint(addr);
+    mem_Write(buffer, addr, 0x80); //todo
+}
+
 void IPC_debugprint(u32 addr)
 {
      u32 head = mem_Read32(addr);
@@ -32,7 +43,8 @@ void IPC_debugprint(u32 addr)
      addr += 4;
      for (u32 i = 0; i < normal; i++)
      {
-         DEBUG("%08X\n", mem_Read32(addr));
+         u32 temp = mem_Read32(addr);
+         DEBUG("%08X\n", temp);
          addr += 4;
      }
      for (u32 i = 0; i < translated; i++)
@@ -73,7 +85,9 @@ void IPC_debugprint(u32 addr)
              i++;
              break;
          case 0x4:
-             DEBUG("PXI I/O (size %08X)\n", (desc >> 4));
+             DEBUG("PXI I/O addr = %08x (size %08X)\n",mem_Read32(addr + 4), (desc >> 4));
+             addr += 4;
+             i++;
              break;
          case 0x6:
              DEBUG("nothing %08X\n", desc);

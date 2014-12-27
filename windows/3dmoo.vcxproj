@@ -125,7 +125,7 @@
       </PrecompiledHeader>
       <WarningLevel>Level3</WarningLevel>
       <Optimization>Disabled</Optimization>
-      <PreprocessorDefinitions>MODULE_SUPPORT;1GDB_STUB;WIN32;MODET;MODE32;_DEBUG;_CONSOLE;_LIB;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>MODULE_SUPPORT;GDB_STUB;WIN32;MODET;MODE32;_DEBUG;_CONSOLE;_LIB;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <AdditionalIncludeDirectories>..\inc;..\inc\arm11;..\src;..\src\arm11;$(SDL2)\include\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <MinimalRebuild>false</MinimalRebuild>
@@ -367,6 +367,7 @@
     <ClInclude Include="..\inc\mem.h" />
     <ClInclude Include="..\inc\screen.h" />
     <ClInclude Include="..\inc\gpu.h" />
+    <ClInclude Include="..\inc\service_macros.h" />
     <ClInclude Include="..\inc\svc.h" />
     <ClInclude Include="..\inc\threads.h" />
     <ClInclude Include="..\inc\util.h" />
@@ -379,7 +380,6 @@
     <ClInclude Include="..\src\arm11\vfp\vfp.h" />
     <ClInclude Include="..\src\arm11\vfp\vfpdouble.h" />
     <ClInclude Include="..\src\arm11\vfp\vfp_helper.h" />
-    <ClInclude Include="..\src\services\service_macros.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
