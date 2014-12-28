@@ -44,40 +44,6 @@ extern ARMul_State s;
 #define THREAD_ID_OFFSET 0xC
 
 
-#ifdef MODULE_SUPPORT
-
-thread** threadsproc;
-u32*    num_threadsproc;
-u32     current_proc = 0;
-
-void ModuleSupport_ThreadsInit(u32 modulenum)
-{
-    u32 i;
-    threadsproc = (thread **)malloc(sizeof(thread *)*(modulenum + 1));
-    for (i = 0; i < (modulenum + 1); i++) {
-        *(threadsproc + i) = (thread *)malloc(sizeof(thread)*(MAX_THREADS));
-        memset(*(threadsproc + i), 0, sizeof(thread)*(MAX_THREADS));
-    }
-    num_threadsproc = (u32 *)malloc(sizeof(u32)*(modulenum + 1));
-    memset(num_threadsproc, 0, sizeof(u32*)*(modulenum + 1));
-}
-void ModuleSupport_SwapProcessThreads(u32 newproc)
-{
-    threads_SaveContextCurrentThread();
-    memcpy(*(threadsproc + current_proc), threads, sizeof(thread)*(MAX_THREADS)); //save maps
-    *(num_threadsproc + current_proc) = num_threads;
-
-    memcpy(threads, *(threadsproc + newproc), sizeof(thread)*(MAX_THREADS)); //save maps
-    current_thread = 0;
-    num_threads = *(num_threadsproc + newproc);
-    curprocesshandle = *(curprocesshandlelist + newproc);
-    current_proc = newproc;
-    arm11_LoadContext(&threads[0]);
-}
-
-#endif
-
-
 u32 threads_New(u32 handle)
 {
     if(num_threads == MAX_THREADS) {
@@ -131,7 +97,7 @@ bool threads_IsThreadActive(s32 id)
                     handle_types[hi->type].fnWaitSynchronization(hi, &is_waiting);
                 else
                 {
-                    DEBUG("handle_types[hi->type].fnWaitSynchronization == NULL type %i", hi->type);
+                    DEBUG("handle_types[hi->type].fnWaitSynchronization == NULL type %x\n", hi->type);
                     return true;
                 }
                 THREADDEBUG("    %08x, type=%s, waiting=%s\n", handle, handle_types[hi->type].name,
@@ -295,12 +261,12 @@ void threads_Execute()
         }
         last_one = s.NumInstrs - diff;//the cycels we have not used
         s.NumInstrs += 11172; //should be less but we have to debug stuff and that makes if faster (normal ~1000)
-        threads_Switch(t);
         if (!threads_IsThreadActive(t)) {
             THREADDEBUG("Skipping thread %d..\n", t);
             continue;
         }
         nothreadused = false;
+        threads_Switch(t);
 
 #ifdef MEM_REORDER
         mem_Reorder();
@@ -585,7 +551,6 @@ u32 thread_CloseHandle(ARMul_State *state, u32 handle)
 
     threads_StopThread(id);
     state->NumInstrsToExecute = 0;
-    handle_free(handle);
     return 0;
 }
 

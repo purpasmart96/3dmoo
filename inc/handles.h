@@ -20,13 +20,12 @@
 
 #define HANDLES_BASE    0x0DADBABE
 
-#define HANDLE_SERV_STAT_CONNECTED         0x1
-#define HANDLE_SERV_STAT_CONNECTEDOPEN     0x2
-#define HANDLE_SERV_STAT_SYN               0x4
-#define HANDLE_SERV_STAT_SYN_IN_PROGRESS   0x8
-#define HANDLE_SERV_STAT_REPLY             0x10
-
-#define SERVERFREE                         0x1
+#define HANDLE_SERV_STAT_TAKEN       0x1
+#define HANDLE_SERV_STAT_WAITING     0x2
+#define HANDLE_SERV_STAT_SYNCING     0x4
+#define HANDLE_SERV_STAT_ACKING      0x8
+#define HANDLE_SERV_STAT_INITING     0x10
+#define HANDLE_SERV_STAT_OPENING     0x20
 
 #define HANDLE_TYPE_UNK                     0
 #define HANDLE_TYPE_PORT                    1
@@ -145,7 +144,6 @@ typedef struct {
 
     bool locked;
     u32  locktype;
-    u32  process;
     u32  thread;
     u32  handle;
 
@@ -154,26 +152,16 @@ typedef struct {
 } handleinfo;
 
 //main.c
-#ifdef MODULE_SUPPORT
-u32 overdrivnum;
-char** overdrivnames;
-#endif
 
 // handles.c
+void handle_Init();
 handleinfo* handle_Get(u32 handle);
 u32 handle_New(u32 type, uintptr_t subtype);
-int handle_free(u32 handle);
-void handle_init();
 
-#ifdef MODULE_SUPPORT
-u32 *curprocesshandlelist;
-#endif
-
-u32 curprocesshandle;
+u32 g_process_handle;
 
 //handles.h
 u32 wrapWaitSynchronizationN(u32 nanoseconds1, u32 handles_ptr, u32 handles_count, u32 wait_all, u32 nanoseconds2, u32 out);
-u32 handle_wrapWaitSynchronization1(u32 handle);
 
 // services/srv.c
 u32 services_SyncRequest(handleinfo* h, bool *locked);

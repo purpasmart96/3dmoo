@@ -17,12 +17,6 @@
 
 #include "arm11.h"
 
-void IPC_debugprint(u32 addr);
-
-void IPC_readstruct(u32 addr, u8* buffer);
-
-void IPC_writestruct(u32 addr, u8* buffer);
-
 #define CMD(n)                                  \
     mem_Read32(arm11_ServiceBufferAddress() + 0x80 + 4*(n))
 
@@ -43,7 +37,6 @@ void IPC_writestruct(u32 addr, u8* buffer);
 
 #define SERVICE_END()                                           \
         default:                                                \
-            IPC_debugprint(arm11_ServiceBufferAddress() + 0x80);\
             ERROR("Not implemented cmd %08x\n", CMD(0));        \
             return -1;                                          \
         }                                                       \

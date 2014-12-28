@@ -22,17 +22,6 @@
 
 #include "service_macros.h"
 
-void IPC_readstruct(u32 addr,u8* buffer)
-{
-    IPC_debugprint(addr);
-    mem_Read(buffer, addr, 0x80); //todo
-}
-void IPC_writestruct(u32 addr, u8* buffer)
-{
-    IPC_debugprint(addr);
-    mem_Write(buffer, addr, 0x80); //todo
-}
-
 void IPC_debugprint(u32 addr)
 {
      u32 head = mem_Read32(addr);
@@ -43,8 +32,7 @@ void IPC_debugprint(u32 addr)
      addr += 4;
      for (u32 i = 0; i < normal; i++)
      {
-         u32 temp = mem_Read32(addr);
-         DEBUG("%08X\n", temp);
+         DEBUG("%08X\n", mem_Read32(addr));
          addr += 4;
      }
      for (u32 i = 0; i < translated; i++)
