@@ -120,9 +120,9 @@ int main(int argc, char* argv[])
 
 #ifdef GDB_STUB
         if ((strcmp(argv[i], "-gdbport") == 0)) {
-            i++;
-            gdbstub_Init(atoi(argv[++i]));
+            gdb_port = atoi(argv[++i]));
         }
+        gdbstub_Init(gdb_port);
 #endif
         if (i >= argc)
             break;
