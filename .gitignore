@@ -176,7 +176,7 @@ windows/maptest
 decode.code
 dspfirm.bin
 */shared_font.bin
-*/dspram.bin 
+*/dspram.bin
 Cmdlist*.dat
 dump*.bin
 realNAND/*
@@ -210,3 +210,4 @@ depcomp
 install-sh
 missing
 .deps
+title/*
