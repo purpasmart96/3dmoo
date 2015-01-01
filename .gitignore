@@ -211,3 +211,6 @@ install-sh
 missing
 .deps
 title/*
+title/*
+rw/*
+ro/*
