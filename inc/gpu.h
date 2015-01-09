@@ -68,6 +68,7 @@ extern u32 GPU_Regs[0xFFFF];
 
 #define TRIGGER_IRQ 0x10
 
+#define CULL_MODE  0x40
 #define VIEWPORT_WIDTH 0x41
 #define VIEWPORT_WIDTH2 0x42
 #define VIEWPORT_HEIGHT 0x43
@@ -187,8 +188,8 @@ void updateFramebufferaddr(u32 addr, bool bot);
 void Clipper_ProcessTriangle(struct OutputVertex *v0, struct OutputVertex *v1, struct OutputVertex *v2);
 
 //rasterizer.c
-void rasterizer_ProcessTriangle(const struct OutputVertex *v0,
-                                const struct OutputVertex * v1,
-                                const struct OutputVertex * v2);
+void rasterizer_ProcessTriangle(struct OutputVertex *v0,
+                                struct OutputVertex * v1,
+                                struct OutputVertex * v2);
 
 #endif
