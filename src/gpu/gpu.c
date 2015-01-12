@@ -29,7 +29,7 @@
 #include "gpu.h"
 
 
-//#define GSP_ENABLE_LOG
+#define GSP_ENABLE_LOG
 u32 GPU_Regs[0xFFFF]; //do they all exist don't know but well
 
 u32 GPUshadercodebuffer[0xFFFF]; //how big is the buffer?
@@ -371,13 +371,14 @@ static bool ShaderCMP(float a, float b, u32 mode)
     return false;
 }
 
-//#define printfunc
+#define printfunc
 
 void loop(struct VertexShaderState* state, u32 offset, u32 num_instruction, u32 return_offset, u32 int_reg)
 {
 #ifdef printfunc
     DEBUG("callloop %03x %03x %03x %01x\n", offset, num_instruction, return_offset, int_reg);
 #endif
+    state->program_counter = &GPUshadercodebuffer[offset] - 1; // -1 to make sure when incrementing the PC we end up at the correct offset
     Stack_Push(&state->loop_stack, offset + num_instruction);
     Stack_Push(&state->loop_int_stack, int_reg);
     Stack_Push(&state->loop_end_stack, return_offset);
@@ -403,6 +404,7 @@ void call(struct VertexShaderState* state, u32 offset, u32 num_instruction, u32 
 
 void ProcessShaderCode(struct VertexShaderState* state)
 {
+    float should_not_be_used = 0;
     while (true) {
         if (!Stack_Empty(&state->call_stack)) {
             if ((state->program_counter - &GPUshadercodebuffer[0]) == Stack_Top(&state->call_stack)) {
@@ -449,7 +451,7 @@ void ProcessShaderCode(struct VertexShaderState* state)
         const float* src1_ = (instr_common_src1v < 0x10) ? state->input_register_table[instr_common_src1v]
                              : (instr_common_src1v < 0x20) ? &state->temporary_registers[instr_common_src1v - 0x10].v[0]
                              : (instr_common_src1v < 0x80) ? &const_vectors[instr_common_src1v - 0x20].v[0]
-                             : (float*)0;
+                             : &should_not_be_used;
 
         u32 instr_common_src2v = instr_common_src2(instr);
         const float* src2_ = (instr_common_src2v < 0x10) ? state->input_register_table[instr_common_src2v]
@@ -458,7 +460,7 @@ void ProcessShaderCode(struct VertexShaderState* state)
         float* dest = (instr_common_destv < 8) ? state->output_register_table[4 * instr_common_destv]
                       : (instr_common_destv < 0x10) ? (float*)0
                       : (instr_common_destv < 0x20) ? &state->temporary_registers[instr_common_destv - 0x10].v[0]
-                      : (float*)0;
+                      : &should_not_be_used;
 
         u32 swizzle = swizzle_data[instr_common_operand_desc_id(instr)];
 
@@ -915,7 +917,9 @@ void ProcessShaderCode(struct VertexShaderState* state)
                 state->program_counter = &GPUshadercodebuffer[DST];
             }
             else
+            {
                 loop(state, DST, NUM, ((u32)(uintptr_t)(state->program_counter + 1) - (u32)(uintptr_t)(&GPUshadercodebuffer[0])) / 4, ID);
+            }
             break;
         }
         case SHDR_MAD1: //todo add swizzle for the other src
@@ -1265,7 +1269,10 @@ void writeGPUID(u16 ID, u8 mask, u32 size, u32* buffer)
 
     case VSresttriangel:
         if (*buffer & 0x1) //todo more checks
+        {
             buffer_index = 0;
+            strip_ready = 0;
+        }
         updateGPUintreg(*buffer, ID, mask);
         break;
     case VSFloatUniformSetup:
