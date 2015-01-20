@@ -629,6 +629,7 @@ PDC1 called every VBlank?
 void gpu_SendInterruptToAll(u32 ID)
 {
     int i;
+    dsp_sync_soundinter(0); //this is not correct but it patches all games that wait for this
     handleinfo* h = handle_Get(trigevent);
     if (h == NULL) {
         return;
