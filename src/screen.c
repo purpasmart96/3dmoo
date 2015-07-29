@@ -110,9 +110,7 @@ matrix3x2 screen_MakeOrthographicMatrix(float width, float height)
 
 void screen_SwapBuffers()
 {
-
-	for (int i = 0; i <= 2; ++i)  {
-
+    for (int i = 0; i <= 2; ++i)  {
         // Main LCD (0): 0x1ED02204, Sub LCD (1): 0x1ED02A04
         //u32 lcd_color_addr = (i == 0) ? LCD_REG_INDEX(color_fill_top) : LCD_REG_INDEX(color_fill_bottom);
         //lcd_color_addr = HW::VADDR_LCD + 4 * lcd_color_addr;
@@ -125,13 +123,13 @@ void screen_SwapBuffers()
                 // Reallocate texture if the framebuffer size has changed.
                 // This is expected to not happen very often and hence should not be a
                 // performance problem.
-				screen_ConfigureFramebufferTexture(textures[i], framebuffer_config[i]);
+                screen_ConfigureFramebufferTexture(textures[i], framebuffer_config[i]);
             }
-			screen_LoadFBToActiveGLTexture(framebuffer_config[i], textures[i]);
+            screen_LoadFBToActiveGLTexture(framebuffer_config[i], textures[i]);
 
             // Resize the texture in case the framebuffer size has changed
-			textures[i].width = framebuffer_config[i].width;
-			textures[i].height = framebuffer_config[i].height;
+            textures[i].width = framebuffer_config[i].width;
+            textures[i].height = framebuffer_config[i].height;
     }
 
     screen_DrawScreens();
@@ -143,25 +141,25 @@ void screen_SwapBuffers()
 */
 void screen_LoadFBToActiveGLTexture(FramebufferConfig framebuffer, TextureInfo texture) {
 
-	const u32 framebuffer_vaddr = gpu_GetPhysicalMemoryBuff(
-		framebuffer.active_fb == 0 ? framebuffer.address_left1 : framebuffer.address_left2);
+    const u32 framebuffer_vaddr = gpu_GetPhysicalMemoryBuff(
+        framebuffer.active_fb == 0 ? framebuffer.address_left1 : framebuffer.address_left2);
 
-	DEBUG("0x%08x bytes from 0x%08x(%dx%d), fmt %x\n",
-		framebuffer.stride * framebuffer.height,
-		framebuffer_vaddr, (int)framebuffer.width,
-		(int)framebuffer.height, (int)framebuffer.format);
+    DEBUG("0x%08x bytes from 0x%08x(%dx%d), fmt %x\n",
+        framebuffer.stride * framebuffer.height,
+        framebuffer_vaddr, (int)framebuffer.width,
+        (int)framebuffer.height, (int)framebuffer.format);
 
-	const u8* framebuffer_data = gpu_GetPhysicalMemoryBuff(framebuffer_vaddr);
+    const u8* framebuffer_data = gpu_GetPhysicalMemoryBuff(framebuffer_vaddr);
 
-	int bpp = gpu_BytesPerPixel(framebuffer.color_format);
-	size_t pixel_stride = framebuffer.stride / bpp;
+    int bpp = gpu_BytesPerPixel(framebuffer.color_format);
+    size_t pixel_stride = framebuffer.stride / bpp;
 
-	// OpenGL only supports specifying a stride in units of pixels, not bytes, unfortunately
-	//(pixel_stride * bpp == framebuffer.stride);
+    // OpenGL only supports specifying a stride in units of pixels, not bytes, unfortunately
+    //(pixel_stride * bpp == framebuffer.stride);
 
-	// Ensure no bad interactions with GL_UNPACK_ALIGNMENT, which by default
-	// only allows rows to have a memory alignement of 4.
-	//ASSERT(pixel_stride % 4 == 0);
+    // Ensure no bad interactions with GL_UNPACK_ALIGNMENT, which by default
+    // only allows rows to have a memory alignement of 4.
+    //ASSERT(pixel_stride % 4 == 0);
 
 	glBindTexture(GL_TEXTURE_2D, texture.handle);
 	glPixelStorei(GL_UNPACK_ROW_LENGTH, (GLint)pixel_stride);
@@ -217,9 +215,9 @@ void screen_InitOpenGLObjects()
 
     // Attach vertex data to VAO
     glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_handle);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(ScreenRectVertex) * 4, NULL, GL_STREAM_DRAW);
-	glVertexAttribPointer(attrib_position, 2, GL_FLOAT, GL_FALSE, sizeof(ScreenRectVertex), (GLvoid*)offsetof(ScreenRectVertex, position));
-	glVertexAttribPointer(attrib_tex_coord, 2, GL_FLOAT, GL_FALSE, sizeof(ScreenRectVertex), (GLvoid*)offsetof(ScreenRectVertex, tex_coord));
+    glBufferData(GL_ARRAY_BUFFER, sizeof(ScreenRectVertex) * 4, NULL, GL_STREAM_DRAW);
+    glVertexAttribPointer(attrib_position, 2, GL_FLOAT, GL_FALSE, sizeof(ScreenRectVertex), (GLvoid*)offsetof(ScreenRectVertex, position));
+    glVertexAttribPointer(attrib_tex_coord, 2, GL_FLOAT, GL_FALSE, sizeof(ScreenRectVertex), (GLvoid*)offsetof(ScreenRectVertex, tex_coord));
     glEnableVertexAttribArray(attrib_position);
     glEnableVertexAttribArray(attrib_tex_coord);
 
