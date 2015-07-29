@@ -49,6 +49,9 @@
     <Filter Include="Source Files\crypto">
       <UniqueIdentifier>{c584b4be-f5ab-4695-8fb7-7ce0f70f4270}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Source Files\gl">
+      <UniqueIdentifier>{d984b4be-f59b-6379-6537-6ce0f6232170}</UniqueIdentifier>
+    </Filter>
     <Filter Include="Source Files\httpap">
       <UniqueIdentifier>{1a943786-0c3c-4ed9-8fd7-804734b0e7ea}</UniqueIdentifier>
     </Filter>
@@ -97,6 +100,9 @@
       <Filter>Source Files\services</Filter>
     </ClCompile>
     <ClCompile Include="..\src\screen.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\src\shader_load.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="..\src\services\hid_user.c">
@@ -354,6 +360,9 @@
     <ClCompile Include="..\src\lib\crypto\sha2.c">
       <Filter>Source Files\crypto</Filter>
     </ClCompile>
+    <ClCompile Include="..\src\lib\gl\gl_3_2_core.c">
+      <Filter>Source Files\gl</Filter>
+    </ClCompile>
     <ClCompile Include="..\src\lib\http\HTTPClient.c">
       <Filter>Source Files\httpap</Filter>
     </ClCompile>
@@ -426,6 +435,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\inc\hid_user.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\inc\shaders.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\inc\shader_load.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\inc\screen.h">

@@ -20,6 +20,7 @@
 #define _GPU_H_
 
 #include "vec4.h"
+#include "gl/gl_3_2_core.h"
 
 /* Commands for gsp shared-mem. */
 #define GSP_ID_REQUEST_DMA          0
@@ -215,9 +216,167 @@ struct clov4 {
     u8 v[5];
 };
 
+// 3x2 matrix
+typedef struct {
+	GLfloat matrix[6];
+}matrix3x2;
+
 struct clov3 {
     u8 v[5];
 };
+
+typedef enum
+{
+    REQUEST_DMA            = 0x00,
+    SET_COMMAND_LIST_LAST  = 0x01,
+
+    // Fills a given memory range with a particular value
+    SET_MEMORY_FILL        = 0x02,
+
+    // Copies an image and optionally performs color-conversion or scaling.
+    // This is highly similar to the GameCube's EFB copy feature
+    SET_DISPLAY_TRANSFER   = 0x03,
+
+    // Conceptionally similar to SET_DISPLAY_TRANSFER and presumable uses the same hardware path
+    SET_TEXTURE_COPY       = 0x04,
+
+    SET_COMMAND_LIST_FIRST = 0x05,
+} CommandId;
+
+
+typedef struct {
+    CommandId id : 8;
+
+    union {
+        struct 
+        {
+            u32 source_address;
+            u32 dest_address;
+            u32 size;
+        } dma_request;
+
+        struct
+        {
+            u32 address;
+            u32 size;
+        } set_command_list_last;
+
+        struct
+        {
+            u32 start1;
+            u32 value1;
+            u32 end1;
+
+            u32 start2;
+            u32 value2;
+            u32 end2;
+
+            u16 control1;
+            u16 control2;
+        } memory_fill;
+
+        struct 
+        {
+            u32 in_buffer_address;
+            u32 out_buffer_address;
+            u32 in_buffer_size;
+            u32 out_buffer_size;
+            u32 flags;
+		} display_transfer;
+
+        struct
+        {
+            u32 in_buffer_address;
+            u32 out_buffer_address;
+            u32 size;
+            u32 in_width_gap;
+            u32 out_width_gap;
+            u32 flags;
+        } texture_copy;
+
+        u8 raw_data[0x1C];
+    };
+} Command;
+
+typedef struct {
+
+    union
+    {
+	    u32 size;
+
+        u32 width : 16;
+        u32 height : 16;
+	};
+
+    u32 pad1; // (0x2);
+    u32 pad2;
+
+    u32 address_left1;
+    u32 address_left2;
+
+
+	union
+    {
+        u32 format;
+
+        u32 color_format : 3;
+    };
+
+	u32 pad3;
+
+    union
+    {
+        u32 active_fb;
+
+        // 0: Use parameters ending with "1"
+        // 1: Use parameters ending with "2"
+        u32 second_fb_active : 1;
+    };
+
+    u32 pad4; // (0x5);
+    u32 pad5;
+    u32 pad6;
+    u32 pad7;
+    u32 pad8;
+
+    // Distance between two pixel rows, in bytes
+    u32 stride;
+
+    u32 address_right1;
+    u32 address_right2;
+
+    u32 pad_fill[0x30];
+} FramebufferConfig;
+
+typedef struct
+{
+	GLuint handle;
+	GLsizei width;
+	GLsizei height;
+	GLuint  format;
+	GLenum gl_format;
+	GLenum gl_type;
+} TextureInfo;
+
+typedef struct
+{
+	GLfloat position[2];
+	GLfloat tex_coord[2];
+} ScreenRectVertex;
+
+
+GLuint vertex_array_handle;
+GLuint vertex_buffer_handle;
+GLuint program_id;
+
+// Shader uniform location indices
+GLuint uniform_modelview_matrix;
+GLuint uniform_color_texture;
+// Shader attribute input indices
+GLuint attrib_position;
+GLuint attrib_tex_coord;
+
+
 
 void gpu_Init();
 void gpu_WriteReg32(u32 addr, u32 data);
@@ -228,7 +387,10 @@ u8*  gpu_GetPhysicalMemoryBuff(u32 addr);
 u32  gpu_GetPhysicalMemoryRestSize(u32 addr);
 void gpu_SendInterruptToAll(u32 ID);
 void gpu_ExecuteCommands(u8* buffer, u32 size);
-u32  gpu_GetSizeOfWidth(u16 val);
+u32  gpu_BytesPerPixel(u32 color_type);
+u32  gpu_BytesPerColorPixel(u32 format);
+u32  gpu_BytesPerDepthPixel(u32 format);
+u32  gpu_DepthBitsPerPixel(u32 format);
 u32  gpu_ConvertVirtualToPhysical(u32 addr);
 void gpu_UpdateFramebuffer();
 void gpu_UpdateFramebufferAddr(u32 addr, bool bottom);

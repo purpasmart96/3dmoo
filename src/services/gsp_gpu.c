@@ -30,6 +30,8 @@
 u32 numReqQueue = 1;
 u32 trigevent = 0;
 
+Command cmd;
+
 //#define DUMP_CMDLIST
 
 
@@ -105,8 +107,8 @@ void gsp_ExecuteCommandFromSharedMem()
             }
 
             case GSP_ID_SET_MEMFILL: { //speedup todo
-                u32 addr1, val1, addrend1, addr2, val2, addrend2, width;
-                addr1 = *(u32*)(base_addr + (j + 1) * 0x20 + 0x4);
+				u32 start1, val1, addrend1, addr2, val2, addrend2, width;
+				start1 = *(u32*)(base_addr + (j + 1) * 0x20 + 0x4);
                 val1 = *(u32*)(base_addr + (j + 1) * 0x20 + 0x8);
                 addrend1 = *(u32*)(base_addr + (j + 1) * 0x20 + 0xC);
                 addr2 = *(u32*)(base_addr + (j + 1) * 0x20 + 0x10);
@@ -114,15 +116,13 @@ void gsp_ExecuteCommandFromSharedMem()
                 addrend2 = *(u32*)(base_addr + (j + 1) * 0x20 + 0x18);
                 width = *(u32*)(base_addr + (j + 1) * 0x20 + 0x1C);
 
-                GPUDEBUG("GX SetMemoryFill 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X\r\n", addr1, val1, addrend1, addr2, val2, addrend2, width);
-                if (addr1 - 0x1f000000 > 0x600000 || addrend1 - 0x1f000000 > 0x600000) {
+				GPUDEBUG("GX SetMemoryFill 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X\r\n", start1, val1, addrend1, addr2, val2, addrend2, width);
+				if (start1 - 0x1f000000 > 0x600000 || addrend1 - 0x1f000000 > 0x600000) {
                     GPUDEBUG("SetMemoryFill into non VRAM not suported\r\n");
                 } else {
-                    u32 size = gpu_GetSizeOfWidth(width & 0xFFFF);
-                    u32 k;
-                    for(k = addr1; k < addrend1; k+=size) {
-                        s32 m;
-                        for(m = size - 1; m >= 0; m--)
+					u32 size = gpu_BytesPerPixel(width & 0xFFFF);
+					for (u32 k = start1; k < addrend1; k += size) {
+                        for(s32 m = size - 1; m >= 0; m--)
                         {
                             VRAM_MemoryBuff[m + (k - 0x1F000000)] = (u8)(val1 >> (m * 8));
                         }
@@ -132,7 +132,7 @@ void gsp_ExecuteCommandFromSharedMem()
                     if (addr2 && addrend2)
                         GPUDEBUG("SetMemoryFill into non VRAM not suported\r\n");
                 } else {
-                    u32 size = gpu_GetSizeOfWidth((width >> 16) & 0xFFFF);
+					u32 size = gpu_BytesPerPixel((width >> 16) & 0xFFFF);
                     u32 k;
                     for(k = addr2; k < addrend2; k += size) {
                         s32 m;
@@ -148,25 +148,31 @@ void gsp_ExecuteCommandFromSharedMem()
                     gpu_SendInterruptToAll(4);
 
 
-                    u32 inpaddr, outputaddr, inputdim, outputdim, flags, unk;
+					u32 inpaddr, outputaddr, input_size, output_size, flags, unk;
                     inpaddr = *(u32*)(base_addr + (j + 1) * 0x20 + 0x4);
                     outputaddr = *(u32*)(base_addr + (j + 1) * 0x20 + 0x8);
-                    inputdim = *(u32*)(base_addr + (j + 1) * 0x20 + 0xC);
-                    outputdim = *(u32*)(base_addr + (j + 1) * 0x20 + 0x10);
+                    input_size = *(u32*)(base_addr + (j + 1) * 0x20 + 0xC);
+					output_size = *(u32*)(base_addr + (j + 1) * 0x20 + 0x10);
                     flags = *(u32*)(base_addr + (j + 1) * 0x20 + 0x14);
                     unk = *(u32*)(base_addr + (j + 1) * 0x20 + 0x18);
-                    GPUDEBUG("GX SetDisplayTransfer 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X\r\n", inpaddr, outputaddr, inputdim, outputdim, flags, unk);
+					GPUDEBUG("GX SetDisplayTransfer 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X\r\n", inpaddr, outputaddr, input_size, output_size, flags, unk);
 
-                    u8 * inaddr = gpu_GetPhysicalMemoryBuff(gpu_ConvertVirtualToPhysical(inpaddr));
-                    u8 * outaddr = gpu_GetPhysicalMemoryBuff(gpu_ConvertVirtualToPhysical(outputaddr));
+					cmd.display_transfer.in_buffer_address = inpaddr;
+					cmd.display_transfer.out_buffer_address = outputaddr;
+					cmd.display_transfer.in_buffer_size = input_size;
+					cmd.display_transfer.out_buffer_size = output_size;
+					cmd.display_transfer.flags = flags;
 
-                    u32 rely = (inputdim & 0xFFFF);
-                    u32 relx = ((inputdim >> 0x10) & 0xFFFF);
+                    u8* inaddr = gpu_GetPhysicalMemoryBuff(gpu_ConvertVirtualToPhysical(inpaddr));
+                    u8* outaddr = gpu_GetPhysicalMemoryBuff(gpu_ConvertVirtualToPhysical(outputaddr));
 
-                    u32 outy = (outputdim & 0xFFFF);
-                    u32 outx = ((outputdim >> 0x10) & 0xFFFF);
+                    u32 rely = (input_size & 0xFFFF);
+                    u32 relx = ((input_size >> 0x10) & 0xFFFF);
 
-                    if(inputdim != outputdim) {
+					u32 outy = (output_size & 0xFFFF);
+					u32 outx = ((output_size >> 0x10) & 0xFFFF);
+
+					if (input_size != output_size) {
                         /*FILE *test = fopen("Conversion.bin", "wb");
                         u32 len = 0;
                         switch(flags & 0x700)
@@ -201,7 +207,7 @@ void gsp_ExecuteCommandFromSharedMem()
                                 inaddr += outy * abs(relx - outx) * 2;
                                 break;
                         }
-                        //GPUDEBUG("error converting from %08x to %08x\n", inputdim, outputdim);
+                        //GPUDEBUG("error converting from %08x to %08x\n", input_size, output_size);
                         //break;
                     }
 
@@ -297,15 +303,21 @@ void gsp_ExecuteCommandFromSharedMem()
                 }
             case GSP_ID_SET_TEXTURE_COPY: {
                 gpu_SendInterruptToAll(1);
-                u32 inpaddr, outputaddr /*,size*/, inputdim, outputdim, flags;
-                inpaddr = *(u32*)(base_addr + (j + 1) * 0x20 + 0x4);
-                outputaddr = *(u32*)(base_addr + (j + 1) * 0x20 + 0x8);
-                u32 size = *(u32*)(base_addr + (j + 1) * 0x20 + 0xC);
-                inputdim = *(u32*)(base_addr + (j + 1) * 0x20 + 0x10);
-                outputdim = *(u32*)(base_addr + (j + 1) * 0x20 + 0x14);
+				u32 in_buffer_address, out_buffer_address, size, in_width_gap, out_width_gap, flags;
+				in_buffer_address = *(u32*)(base_addr + (j + 1) * 0x20 + 0x4);
+				out_buffer_address = *(u32*)(base_addr + (j + 1) * 0x20 + 0x8);
+                size = *(u32*)(base_addr + (j + 1) * 0x20 + 0xC);
+				in_width_gap = *(u32*)(base_addr + (j + 1) * 0x20 + 0x10);
+				out_width_gap = *(u32*)(base_addr + (j + 1) * 0x20 + 0x14);
                 flags = *(u32*)(base_addr + (j + 1) * 0x20 + 0x18);
-                GPUDEBUG("GX SetTextureCopy 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X --todo--\r\n", inpaddr, outputaddr, size, inputdim, outputdim, flags);
+				GPUDEBUG("GX SetTextureCopy 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X\r\n", in_buffer_address, out_buffer_address, size, in_width_gap, out_width_gap, flags);
 
+				cmd.texture_copy.in_buffer_address = in_buffer_address;
+				cmd.texture_copy.out_buffer_address = out_buffer_address;
+				cmd.texture_copy.size = size;
+				cmd.texture_copy.in_width_gap = in_width_gap;
+				cmd.texture_copy.out_width_gap = out_width_gap;
+				cmd.texture_copy.flags = flags;
                 gpu_UpdateFramebuffer();
                 //goto theother; //untill I know what is the differnece
                 break;
@@ -531,7 +543,7 @@ SERVICE_CMD(0x50200) // SetBufferSwap
     gpu_UpdateFramebufferAddr(arm11_ServiceBufferAddress() + 0x88, //don't use CMD(2) here it is not working!
                           screen & 0x1);
 
-    screen_RenderGPU(); //display new stuff
+//    screen_RenderGPU(); //display new stuff
 
     RESP(1, 0);
     return 0;
@@ -653,7 +665,6 @@ void gpu_SendInterruptToAll(u32 ID)
         extern int noscreen;
         if (!noscreen) {
             screen_HandleEvent();
-            screen_RenderGPU();
         }
     }
 

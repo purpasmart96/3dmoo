@@ -15,8 +15,18 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "gpu.h"
+
 void screen_Init();
 void screen_Free();
-void screen_RenderGPU();
 void screen_HandleEvent();
+void screen_SwapBuffers();
+void screen_DrawScreens();
 
+matrix3x2 screen_MakeOrthographicMatrix(float width, float height);
+void screen_LoadColorToActiveGLTexture(u8 color_r, u8 color_g, u8 color_b, TextureInfo texture);
+void screen_LoadFBToActiveGLTexture(FramebufferConfig framebuffer, TextureInfo texture);
+void screen_ConfigureFramebufferTexture(TextureInfo texture, FramebufferConfig framebuffer);
+void screen_DrawSingleScreenRotated(TextureInfo texture, float x, float y, float w, float h);
+
+int m_current_frame;

@@ -74,23 +74,69 @@ u32 gpu_ConvertVirtualToPhysical(u32 addr) //todo
     return 0;
 }
 
-u32 gpu_GetSizeOfWidth(u16 val) //this is the size of pixel
+u32 gpu_BytesPerPixel(u32 pixel_format)
 {
-    switch (val&0x7000) { //check this
-    case 0x0000: //RGBA8
-        return 4;
-    case 0x1000: //RGB8
-        return 3;
-    case 0x2000: //RGB565
-        return 2;
-    case 0x3000://RGB5A1
-        return 2;
-    case 0x4000://RGBA4
-        return 2;
-    default:
-        GPUDEBUG("unknown len %04x\n",val);
-        return 2;
-    }
+	switch (pixel_format) {
+	case 0: //RGBA8
+		return 4;
+	case 1: //RGB8
+		return 3;
+	case 2: //RGB565
+		return 2;
+	case 3: //RGB5A1
+		return 2;
+	case 4: //RGBA4
+		return 2;
+	default:
+		GPUDEBUG("Unknown color type %04x\n", pixel_format);
+		return 2;
+	}
+}
+
+u32 gpu_BytesPerColorPixel(u32 format)
+{
+	switch (format) {
+	case 0: //RGBA8
+		return 4;
+	case 1: //RGB8
+		return 3;
+	case 2: //RGB5A1
+	case 3: //RGB565
+	case 4: //RGBA4
+		return 2;
+	default:
+		GPUDEBUG("Unknown color format %u\n", format);
+	}
+}
+
+// Returns the number of bytes in the specified depth format
+u32 gpu_BytesPerDepthPixel(u32 format)
+{
+	switch (format) {
+	case 0: //D16
+		return 2;
+	case 2: //D24
+		return 3;
+	case 3: //D24S8
+		return 4;
+	default:
+		GPUDEBUG("Unknown depth format %u\n", format);
+		return 2;
+	}
+}
+
+// Returns the number of bits per depth component of the specified depth format
+u32 gpu_DepthBitsPerPixel(u32 format)
+{
+	switch (format) {
+	case 0: //D16
+		return 16;
+	case 2: //D24
+	case 3: //D24S8
+		return 24;
+	default:
+		GPUDEBUG("Unknown depth format %u\n", format);
+	}
 }
 
 static void updateGPUintreg(u32 data, u32 ID, u8 mask)
@@ -1410,13 +1456,17 @@ void gpu_UpdateFramebuffer()
 
 u8* gpu_GetPhysicalMemoryBuff(u32 addr)
 {
-    if (addr >= 0x18000000 && addr < 0x18600000)return VRAM_MemoryBuff + (addr - 0x18000000);
-    if (addr >= 0x20000000 && addr < 0x28000000)return LINEAR_MemoryBuff + (addr - 0x20000000);
+    if (addr >= 0x18000000 && addr < 0x18600000)
+        return VRAM_MemoryBuff + (addr - 0x18000000);
+    if (addr >= 0x20000000 && addr < 0x28000000)
+        return LINEAR_MemoryBuff + (addr - 0x20000000);
     return NULL;
 }
 u32 gpu_GetPhysicalMemoryRestSize(u32 addr)
 {
-    if (addr >= 0x18000000 && addr < 0x18600000)return addr - 0x18000000;
-    if (addr >= 0x20000000 && addr < 0x28000000)return addr - 0x20000000;
+    if (addr >= 0x18000000 && addr < 0x18600000)
+        return addr - 0x18000000;
+    if (addr >= 0x20000000 && addr < 0x28000000)
+        return addr - 0x20000000;
     return 0;
 }
