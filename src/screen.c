@@ -37,7 +37,6 @@
 
 TextureInfo textures[2];
 ScreenRectVertex coords;
-FramebufferConfig framebuffer_config[2];
 matrix3x2 orth;
 
 GLFWwindow* window = NULL;
@@ -141,8 +140,7 @@ void screen_SwapBuffers()
 */
 void screen_LoadFBToActiveGLTexture(FramebufferConfig framebuffer, TextureInfo texture) {
 
-    const u32 framebuffer_vaddr = gpu_GetPhysicalMemoryBuff(
-        framebuffer.active_fb == 0 ? framebuffer.address_left1 : framebuffer.address_left2);
+    const u32 framebuffer_vaddr = framebuffer.active_fb == 0 ? framebuffer.address_left1 : framebuffer.address_left2;
 
     DEBUG("0x%08x bytes from 0x%08x(%dx%d), fmt %x\n",
         framebuffer.stride * framebuffer.height,
@@ -182,7 +180,7 @@ void screen_LoadFBToActiveGLTexture(FramebufferConfig framebuffer, TextureInfo t
  * Since the color is solid, the texture can be 1x1 but will stretch across whatever it's rendered on.
  * This has the added benefit of being *really fast*.
  */
-void screen_LoadColorToActiveGLTexture(u8 color_r, u8 color_g, u8 color_b, const TextureInfo texture) 
+void screen_LoadColorToActiveGLTexture(u8 color_r, u8 color_g, u8 color_b, TextureInfo texture) 
 {
     glBindTexture(GL_TEXTURE_2D, texture.handle);
 

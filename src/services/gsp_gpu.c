@@ -29,18 +29,21 @@
 
 u32 numReqQueue = 1;
 u32 trigevent = 0;
+static u32 REGS_BEGIN = 0x1EB00000;
 
+
+display_transfer_config display_transfer;
 Command cmd;
+FrameBufferUpdate gpu_FrameBufferUpdate;
+
 
 //#define DUMP_CMDLIST
 
 
 void gsp_ExecuteCommandFromSharedMem()
 {
-    int i;
-
     // For all threads
-    for (i = 0; i < 0x4; i++) {
+    for (int i = 0; i < 0x4; i++) {
         u8* base_addr = (u8*)(GSP_SharedBuff + 0x800 + i * 0x200);
         u32 header = *(u32*)base_addr;
         u32 toprocess = (header >> 8) & 0xFF;
@@ -133,10 +136,8 @@ void gsp_ExecuteCommandFromSharedMem()
                         GPUDEBUG("SetMemoryFill into non VRAM not suported\r\n");
                 } else {
 					u32 size = gpu_BytesPerPixel((width >> 16) & 0xFFFF);
-                    u32 k;
-                    for(k = addr2; k < addrend2; k += size) {
-                        s32 m;
-                        for (m = size - 1; m >= 0; m--)
+                    for(u32 k = addr2; k < addrend2; k += size) {
+                        for (s32 m = size - 1; m >= 0; m--)
                             VRAM_MemoryBuff[m + (k - 0x1F000000)] = (u8)(val2 >> (m * 8));
                     }
                 }
@@ -163,8 +164,45 @@ void gsp_ExecuteCommandFromSharedMem()
 					cmd.display_transfer.out_buffer_size = output_size;
 					cmd.display_transfer.flags = flags;
 
+
+					display_transfer.input_address = inpaddr;
+					display_transfer.output_address = outputaddr;
+					display_transfer.input_size = input_size;
+					display_transfer.output_size = output_size;
+					display_transfer.flags = flags;
+
                     u8* inaddr = gpu_GetPhysicalMemoryBuff(gpu_ConvertVirtualToPhysical(inpaddr));
                     u8* outaddr = gpu_GetPhysicalMemoryBuff(gpu_ConvertVirtualToPhysical(outputaddr));
+
+
+					u32 config_output_width = (output_size & 0xFFFF);
+					u32 config_output_height = ((output_size >> 0x10) & 0xFFFF);
+
+					u32 config_input_width = (input_size & 0xFFFF);
+					u32 config_input_height = ((input_size >> 0x10) & 0xFFFF);
+
+
+					u32 config_flip_vertically = (flags & 1);
+					u32 config_output_tiled = (flags >> 1) & 1;
+					u32 config_raw_copy = (flags >> 3) & 1;
+					u32 config_input_format = (flags >> 0x8) & 5;
+					u32 config_output_format = (flags >> 0x12) & 5;
+
+					u32 config_scaling = (flags >> 24) & 3;
+
+					u32 config_NoScale = 0;
+					u32 config_ScaleX = 1;
+					u32 config_ScaleXY = 2;
+
+					bool horizontal_scale = config_scaling != config_NoScale;
+					bool vertical_scale = config_scaling == config_ScaleXY;
+
+					u32 output_width = config_output_width >> horizontal_scale;
+					u32 output_height = config_output_height >> vertical_scale;
+
+					u32 input_size_ = config_input_width * config_input_height * gpu_BytesPerPixel(config_input_format);
+					u32 output_size_ = output_width * output_height * gpu_BytesPerPixel(config_output_format);
+
 
                     u32 rely = (input_size & 0xFFFF);
                     u32 relx = ((input_size >> 0x10) & 0xFFFF);
@@ -298,7 +336,6 @@ void gsp_ExecuteCommandFromSharedMem()
                             }
                         }
                     }
-                    gpu_UpdateFramebuffer();
                     break;
                 }
             case GSP_ID_SET_TEXTURE_COPY: {
@@ -318,8 +355,7 @@ void gsp_ExecuteCommandFromSharedMem()
 				cmd.texture_copy.in_width_gap = in_width_gap;
 				cmd.texture_copy.out_width_gap = out_width_gap;
 				cmd.texture_copy.flags = flags;
-                gpu_UpdateFramebuffer();
-                //goto theother; //untill I know what is the differnece
+                //gpu_UpdateFramebuffer();
                 break;
             }
             case GSP_ID_FLUSH_CMDLIST: {
@@ -341,7 +377,7 @@ void gsp_ExecuteCommandFromSharedMem()
     }
 }
 
-u32 gpu_RegisterInterruptRelayQueue(u32 flags, u32 Kevent, u32*threadID, u32*outMemHandle)
+void gpu_RegisterInterruptRelayQueue(u32 flags, u32 Kevent, u32*threadID, u32*outMemHandle)
 {
     *threadID = numReqQueue++;
     *outMemHandle = handle_New(HANDLE_TYPE_SHAREDMEM, MEM_TYPE_GSP_0);
@@ -350,14 +386,75 @@ u32 gpu_RegisterInterruptRelayQueue(u32 flags, u32 Kevent, u32*threadID, u32*out
     if (h == NULL) {
         GPUDEBUG("failed to get Event\n");
         PAUSE();
-        return -1;// -1;
     }
     h->locked = false; //unlock we are fast
 
     *(u32*)(GSP_SharedBuff + *threadID * 0x40) = 0x0; //dump from save GSP v0 flags 0
     *(u32*)(GSP_SharedBuff + *threadID * 0x44) = 0x0; //dump from save GSP v0 flags 0
     *(u32*)(GSP_SharedBuff + *threadID * 0x48) = 0x0; //dump from save GSP v0 flags 0
-    return 0x2A07; //dump from save GSP v0 flags 0
+}
+
+/// Gets a pointer to the interrupt relay queue for a given thread index
+InterruptRelayQueue* gpu_GetInterruptRelayQueue(u32 threadID)
+{
+	u8* base_addr = *(u8*)(GSP_SharedBuff + threadID * sizeof(InterruptRelayQueue));
+	DEBUG("base_addr=0x%08x", base_addr);
+	return base_addr;
+}
+
+/**
+* Checks if the parameters in a register write call are valid and logs in the case that
+* they are not
+* @param base_address The first address in the sequence of registers that will be written
+* @param size_in_bytes The number of registers that will be written
+* @return true if the parameters are valid, false otherwise
+*/
+bool CheckWriteParameters(u32 base_address, u32 size_in_bytes) {
+	// TODO: Return proper error codes
+	if (base_address + size_in_bytes >= 0x420000) {
+		ERROR("Write address out of range! (address=0x%08x, size=0x%08x)\n",
+			base_address, size_in_bytes);
+		return false;
+	}
+
+	// size should be word-aligned
+	if ((size_in_bytes % 4) != 0) {
+		ERROR("Invalid size 0x%08x\n", size_in_bytes);
+		return false;
+	}
+
+	return true;
+}
+
+void WriteHWRegs(u32 base_address, u32 size_in_bytes, const u32* data) {
+	// TODO: Return proper error codes
+	if (!CheckWriteParameters(base_address, size_in_bytes))
+		return;
+
+	while (size_in_bytes > 0) {
+		gpu_WriteReg32(base_address + REGS_BEGIN, *data);
+
+		size_in_bytes -= 4;
+		++data;
+		base_address += 4;
+	}
+}
+
+void SetBufferSwap(u32 screen_id, const FrameBufferInfo info) {
+	u32 base_address = 0x400000;
+	u32 phys_address_left = gpu_ConvertVirtualToPhysical(info.address_left);
+	u32 phys_address_right = gpu_ConvertVirtualToPhysical(info.address_right);
+	if (info.active_fb == 0) {
+		WriteHWRegs(base_address + 4 * (u32)((framebuffer_config[screen_id].address_left1)), 4, &phys_address_left);
+		WriteHWRegs(base_address + 4 * (u32)(framebuffer_config[screen_id].address_right1), 4, &phys_address_right);
+	} else {
+		WriteHWRegs(base_address + 4 * (u32)(framebuffer_config[screen_id].address_left2), 4, &phys_address_left);
+		WriteHWRegs(base_address + 4 * (u32)(framebuffer_config[screen_id].address_right2), 4, &phys_address_right);
+	}
+	WriteHWRegs(base_address + 4 * (u32)(framebuffer_config[screen_id].stride), 4, &info.stride);
+	WriteHWRegs(base_address + 4 * (u32)(framebuffer_config[screen_id].color_format), 4, &info.format);
+	WriteHWRegs(base_address + 4 * (u32)(framebuffer_config[screen_id].active_fb), 4, &info.shown_fb);
+	DEBUG("BufferSwap called");
 }
 
 
@@ -476,9 +573,7 @@ SERVICE_CMD(0x30082) // WriteHWRegsRepeat
     }
 
     if(ret == 0) {
-        u32 i;
-
-        for (i = 0; i < length; i += 4) {
+        for (u32 i = 0; i < length; i += 4) {
             u32 val = mem_Read32(inaddr + i);
 
             GPUDEBUG("Writing %08x to register %08x..\n", val, addr);
@@ -531,19 +626,11 @@ SERVICE_CMD(0x50200) // SetBufferSwap
 {
     GPUDEBUG("SetBufferSwap screen=%08x\n", CMD(1));
 
-    u32 screen = CMD(1);
-    u32 reg = screen ? 0x400554 : 0x400454;
+    u32 screen_id = CMD(1);
+	u32 fb_junk = CMD(2);
 
-    if(gpu_ReadReg32(reg) < 0x52) {
-        // init screen
-        // TODO: reverse this.
-    }
-
-    // TODO: Get rid of this:
-    gpu_UpdateFramebufferAddr(arm11_ServiceBufferAddress() + 0x88, //don't use CMD(2) here it is not working!
-                          screen & 0x1);
-
-//    screen_RenderGPU(); //display new stuff
+	FrameBufferInfo* fb_info = (FrameBufferInfo*)&fb_junk;
+	SetBufferSwap(screen_id, *fb_info);
 
     RESP(1, 0);
     return 0;
@@ -593,26 +680,34 @@ SERVICE_CMD(0x00100040) // SetAxiConfigQoSMode
 
 SERVICE_CMD(0x130042) // RegisterInterruptRelayQueue
 {
-    GPUDEBUG("RegisterInterruptRelayQueue %08x %08x\n",
-          mem_Read32(arm11_ServiceBufferAddress() + 0x84),
-          mem_Read32(arm11_ServiceBufferAddress() + 0x8C));
+	u32 flags = CMD(1);
+	u32 handle_event = CMD(3);
+    GPUDEBUG("RegisterInterruptRelayQueue flags=%08x\n", flags);
 
-    u32 threadID = 0;
-    u32 outMemHandle = 0;
+	u32 *threadID = numReqQueue++;
+	u32 *outMemHandle = handle_New(HANDLE_TYPE_SHAREDMEM, MEM_TYPE_GSP_0);
+	trigevent = handle_event;
+	handleinfo* h = handle_Get(handle_event);
+	if (h == NULL) {
+		GPUDEBUG("failed to get Event\n");
+		PAUSE();
+	}
+	h->locked = false; //unlock we are fast
 
-    mem_Write32(arm11_ServiceBufferAddress() + 0x84,
-                gpu_RegisterInterruptRelayQueue(mem_Read32(arm11_ServiceBufferAddress() + 0x84),
-                        mem_Read32(arm11_ServiceBufferAddress() + 0x8C), &threadID, &outMemHandle));
+	//gpu_RegisterInterruptRelayQueue(flags, handle_event, threadID, outMemHandle);
 
-    mem_Write32(arm11_ServiceBufferAddress() + 0x88, threadID);
-    mem_Write32(arm11_ServiceBufferAddress() + 0x90, outMemHandle);
+
+	RESP(1, 0x2A07);
+    RESP(2, threadID);
+    RESP(4, outMemHandle);
     return 0;
 }
 
 SERVICE_CMD(0x160042) // AcquireRight
 {
     GPUDEBUG("AcquireRight %08x %08x --todo--\n", mem_Read32(arm11_ServiceBufferAddress() + 0x84), mem_Read32(arm11_ServiceBufferAddress() + 0x8C));
-    mem_Write32(arm11_ServiceBufferAddress() + 0x84, 0); //no error
+    //mem_Write32(arm11_ServiceBufferAddress() + 0x84, 0); //no error
+	RESP(1, 0); // no error
     return 0;
 }
 
@@ -640,24 +735,35 @@ PDC1 called every VBlank?
 */
 void gpu_SendInterruptToAll(u32 ID)
 {
-    int i;
     dsp_sync_soundinter(0); //this is not correct but it patches all games that wait for this
     handleinfo* h = handle_Get(trigevent);
     if (h == NULL) {
         return;
     }
     h->locked = false; //unlock we are fast
-    for (i = 0; i < 4; i++) {
-        u8 next = *(u8*)(GSP_SharedBuff + i * 0x40);        //0x33 next is 00
-        u8 inuse = *(u8*)(GSP_SharedBuff + i * 0x40 + 1);
-        next += inuse;
-        if (inuse > 0x20 && ((ID == 2) || (ID == 3)))
-            continue; //todo
+    for (int i = 0; i < 4; i++) {
+		u8 next = *(u8*)(GSP_SharedBuff + i * 0x40);
+		u8 number_interrupts = *(u8*)(GSP_SharedBuff + i * 0x40 + 1);
+		next += number_interrupts;
 
-        *(u8*)(GSP_SharedBuff + i * 0x40 + 1) = inuse + 1;
+		number_interrupts += 1;
+
         *(u8*)(GSP_SharedBuff + i * 0x40 + 2) = 0x0; //no error
-        next = next % 0x34;
+        next = next % 0x34; // 0x34 is the number of interrupt slots
         *(u8*)(GSP_SharedBuff + i * 0x40 + 0xC + next) = ID;
+
+		// Update framebuffer information if requested
+		// TODO(yuriks): Confirm where this code should be called. It is definitely updated without
+		//               executing any GSP commands, only waiting on the event.
+		int screen_id = (ID == 2) ? 0 : (ID == 3) ? 1 : -1;
+		if (screen_id != -1) {
+			FrameBufferUpdate* info = gpu_GetFrameBufferInfo(i, screen_id);
+			if (info->is_dirty) {
+				SetBufferSwap(screen_id, info->framebuffer_info[info->index]);
+				info->is_dirty = false;
+			}
+		}
+
     }
 
     if (ID == 4)

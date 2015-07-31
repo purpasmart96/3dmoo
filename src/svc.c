@@ -147,7 +147,7 @@ void svc_Execute(ARMul_State * state, ARMword num)
     if (name == NULL)
         name = "Unknown";
 
-    LOG("\n>> svc%s (0x%x)\n", name, num);
+    //LOG("\n>> svc%s (0x%x)\n", name, num);
 
     switch (num) {
     case 1:
@@ -156,7 +156,7 @@ void svc_Execute(ARMul_State * state, ARMword num)
     case 2:
         //Stubbed for now
         //arm11_SetR(0, svcQueryMemory());
-        DEBUG("%x, %x, %x\n", arm11_R(0), arm11_R(1), arm11_R(2));
+        //DEBUG("%x, %x, %x\n", arm11_R(0), arm11_R(1), arm11_R(2));
         arm11_SetR(0, 0);
         return;
     case 3: //Exit Process
@@ -253,8 +253,8 @@ void svc_Execute(ARMul_State * state, ARMword num)
         arm11_SetR(0, svcGetSystemInfo());
         return;
     case 0x2B:
-        DEBUG("svcGetProcessInfo=%08x\n",  arm11_R(2));
-        DEBUG("STUBBED\n");
+        //DEBUG("svcGetProcessInfo=%08x\n",  arm11_R(2));
+        //DEBUG("STUBBED\n");
         arm11_SetR(0, 0);
         return;
     case 0x2D:
@@ -266,14 +266,14 @@ void svc_Execute(ARMul_State * state, ARMword num)
         threads_Reschedule();
         return;
     case 0x33:
-        DEBUG("OpenProcess=%08x\n",arm11_R(1));
-        DEBUG("STUBBED\n");
+        //DEBUG("OpenProcess=%08x\n",arm11_R(1));
+        //DEBUG("STUBBED\n");
         arm11_SetR(0, 0);
         arm11_SetR(1, handle_New(0, HANDLE_TYPE_PROCESS ));
         return;
     case 0x38:
-        DEBUG("resourcelimit=%08x, handle=%08x\n", arm11_R(0), arm11_R(1));
-        DEBUG("STUBBED\n");
+        //DEBUG("resourcelimit=%08x, handle=%08x\n", arm11_R(0), arm11_R(1));
+        //DEBUG("STUBBED\n");
         PAUSE();
         //arm11_SetR(0, 1);
         arm11_SetR(1, handle_New(0, 0)); // r1 = handle_out
@@ -282,8 +282,8 @@ void svc_Execute(ARMul_State * state, ARMword num)
         arm11_SetR(0, svcGetThreadId());
         return;
     case 0x3A:
-        DEBUG("values_ptr=%08x, handleResourceLimit=%08x, names_ptr=%08x, nameCount=%d\n",
-              arm11_R(0), arm11_R(1), arm11_R(2), arm11_R(3));
+        //DEBUG("values_ptr=%08x, handleResourceLimit=%08x, names_ptr=%08x, nameCount=%d\n",
+        //      arm11_R(0), arm11_R(1), arm11_R(2), arm11_R(3));
         arm11_SetR(0, svcGetResourceLimitCurrentValues());
         return;
     case 0x3C: //Break

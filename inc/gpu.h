@@ -225,6 +225,17 @@ struct clov3 {
     u8 v[5];
 };
 
+/// GSP interrupt ID
+typedef enum {
+	PSC0 = 0x00,
+	PSC1 = 0x01,
+	PDC0 = 0x02, // Seems called every vertical screen line
+	PDC1 = 0x03, // Seems called every frame
+	PPF = 0x04,
+	P3D = 0x05,
+	DMA = 0x06,
+} InterruptId;
+
 typedef enum
 {
     REQUEST_DMA            = 0x00,
@@ -242,6 +253,23 @@ typedef enum
 
     SET_COMMAND_LIST_FIRST = 0x05,
 } CommandId;
+
+/// GSP thread interrupt relay queue
+typedef struct
+{
+	// Index of last interrupt in the queue
+	u8 index;
+	// Number of interrupts remaining to be processed by the userland code
+	u8 number_interrupts;
+	// Error code - zero on success, otherwise an error has occurred
+	u8 error_code;
+	u8 padding1;
+
+	u32 missed_PDC0;
+	u32 missed_PDC1;
+
+	InterruptId slot[0x34];   ///< Interrupt ID slots
+} InterruptRelayQueue;
 
 
 typedef struct {
@@ -348,6 +376,72 @@ typedef struct {
     u32 pad_fill[0x30];
 } FramebufferConfig;
 
+typedef struct {
+
+	u32 input_address;
+	u32 output_address;
+
+	union
+	{
+		u32 output_size;
+
+        u32 output_width : 16;
+        u32 output_height : 16;
+	};
+
+	union
+	{
+		u32 input_size;
+
+        u32 input_width : 16;
+        u32 input_height : 16;
+	};
+
+	union
+	{
+		u32 flags;
+
+        u32 flip_vertically : 1;     // flips input data vertically
+        u32 output_tiled : 1;     // Converts from linear to tiled format
+        u32 raw_copy : 1;     // Copies the data without performing any processing
+        u32          : 1;
+        u32 dont_swizzle : 1;
+        u32              : 2;
+        u32 input_format : 3;
+        u32 output_format : 3;
+
+        u32        : 9;
+
+		u32 scaling : 2; // Determines the scaling mode of the transfer
+	};
+
+	u32 pad4;
+
+	// it seems that writing to this field triggers the display transfer
+	u32 trigger;
+} display_transfer_config;
+
+
+typedef struct {
+	u32 active_fb : 1; // 0 = first, 1 = second
+
+	u32 address_left;
+	u32 address_right;
+	u32 stride;    // maps to 0x1EF00X90 ?
+	u32 format;    // maps to 0x1EF00X70 ?
+	u32 shown_fb;  // maps to 0x1EF00X78 ?
+	u32 unknown;
+} FrameBufferInfo;
+
+typedef struct {
+	u8 index : 1;    // Index used for GSP_SetBufferSwap
+	u8 is_dirty : 1; // true if GSP should update GPU framebuffer registers
+	u16 pad1;
+	FrameBufferInfo framebuffer_info[2];
+	u32 pad2;
+} FrameBufferUpdate;
+
+
 typedef struct
 {
 	GLuint handle;
@@ -375,14 +469,18 @@ GLuint uniform_color_texture;
 // Shader attribute input indices
 GLuint attrib_position;
 GLuint attrib_tex_coord;
+FrameBufferInfo fb_info;
+FramebufferConfig framebuffer_config[2];
+void SetBufferSwap(u32 screen_id, const FrameBufferInfo info);
 
-
+InterruptRelayQueue* gpu_GetInterruptRelayQueue(u32 threadID);
+u8* gpu_GetFrameBufferInfo(u32 thread_id, u32 screen_index);
 
 void gpu_Init();
 void gpu_WriteReg32(u32 addr, u32 data);
 u32  gpu_ReadReg32(u32 addr);
 void gpu_TriggerCmdReqQueue();
-u32  gpu_RegisterInterruptRelayQueue(u32 Flags, u32 Kevent, u32*threadID, u32*outMemHandle);
+void gpu_RegisterInterruptRelayQueue(u32 Flags, u32 Kevent, u32*threadID, u32*outMemHandle);
 u8*  gpu_GetPhysicalMemoryBuff(u32 addr);
 u32  gpu_GetPhysicalMemoryRestSize(u32 addr);
 void gpu_SendInterruptToAll(u32 ID);

@@ -27,6 +27,9 @@
 #include "handles.h"
 #include "mem.h"
 #include "gpu.h"
+#include "screen.h"
+
+Command cmd;
 
 #define GSP_ENABLE_LOG
 u32 GPU_Regs[0xFFFF]; //do they all exist don't know but well
@@ -63,15 +66,32 @@ void gpu_Init()
     gpu_WriteReg32(RGBdownoneleft, 0x18000000 + 0x5DC00 * 4);
     gpu_WriteReg32(RGBdowntwoleft, 0x18000000 + 0x5DC00 * 5);
 
+	screen_SwapBuffers();
     //mem_Write32(0x1FF81080, (u32)0.0f);
 }
 
-u32 gpu_ConvertVirtualToPhysical(u32 addr) //todo
+u32 gpu_ConvertVirtualToPhysical(u32 addr)
 {
-    if (addr >= 0x14000000 && addr < 0x1C000000)return addr + 0xC000000; //FCRAM
-    if (addr >= 0x1F000000 && addr < 0x1F600000)return addr - 0x7000000; //VRAM
+    if (addr >= 0x14000000 && addr < 0x1C000000)
+		return addr - 0x14000000 + 0x08000000; //FCRAM
+    if (addr >= 0x1F000000 && addr < 0x1F600000)
+		return addr - 0x1F000000 + 0x18000000; //VRAM
     GPUDEBUG("Can't convert virtual to physical %08x\n",addr);
     return 0;
+}
+
+u32 gpu_ConvertPhysicalToVirtual(u32 addr)
+{
+    if (addr >= 0x18000000 && addr < 0x18600000) {
+        return addr - 0x18000000 + 0x1F000000;
+    } else if (addr >= 0x20000000 && addr < 0x28000000) {
+        return addr - 0x20000000 + 0x14000000;
+    } else if (addr >= 0x10100000 && addr < 0x11100000) {
+        return addr - 0x10100000 + 0x1EC00000;
+    } else {
+        GPUDEBUG("Can't convert physical to virtual %08x\n", addr);
+        return addr;
+    } 
 }
 
 u32 gpu_BytesPerPixel(u32 pixel_format)
@@ -1377,81 +1397,23 @@ void gpu_UpdateFramebufferAddr(u32 addr, bool bottom)
     return;
 }
 
-void gpu_UpdateFramebuffer()
+u8* gpu_GetFrameBufferInfo(u32 thread_id, u32 screen_index)
 {
-    //we use the last in buffer with flag set
-    int i;
-    for (i = 0; i < 4; i++) {
-        u8 *base_addr_top = (u8*)(GSP_SharedBuff + 0x200 + i * 0x80); //top
-        if (*(u8*)(base_addr_top + 1)) {
-            *(u8*)(base_addr_top + 1) = 0;
-            if (*(u8*)(base_addr_top))
-                base_addr_top += 0x20; //get the other
-            else
-                base_addr_top += 0x4;
+	// For each thread there are two FrameBufferUpdate fields
+	u32 offset = 0x200 + (2 * thread_id + screen_index) * 0x40;
+	//u8 *base_addr = (u8*)(GSP_SharedBuff + 0x200 + thread_id * 0x80);
+    u8 *base_addr = (u8*)(GSP_SharedBuff + offset);
+	//sharedmemvadr + 0x200 + threadindex * 0x80
 
-            u32 active_framebuffer = *(u32*)(base_addr_top); //"0=first, 1=second"
-            u32 framebuf0_vaddr = *(u32*)(base_addr_top + 4); //"Framebuffer virtual address, for the main screen this is the 3D left framebuffer"
-            u32 framebuf1_vaddr = *(u32*)(base_addr_top + 8); //"For the main screen: 3D right framebuffer address"
-            u32 framebuf_widthbytesize = *(u32*)(base_addr_top + 12); //"Value for 0x1EF00X90, controls framebuffer width"
-            u32 format = *(u32*)(base_addr_top + 16); //"Framebuffer format, this u16 is written to the low u16 for LCD register 0x1EF00X70."
-            u32 framebuf_dispselect = *(u32*)(base_addr_top + 20); //"Value for 0x1EF00X78, controls which framebuffer is displayed"
-            u32 unk = *(u32*)(base_addr_top + 24); //"?"
+    fb_info.active_fb = *(u32*)(base_addr); //"0=first, 1=second"
+	fb_info.address_left = *(u32*)(base_addr + 4); //"Framebuffer virtual address, for the main screen this is the 3D left framebuffer"
+    fb_info.address_right = *(u32*)(base_addr + 8); //"For the main screen: 3D right framebuffer address"
+    fb_info.stride = *(u32*)(base_addr + 12); //"Value for 0x1EF00X90, controls framebuffer width"
+    fb_info.format = *(u32*)(base_addr + 16); //"Framebuffer format, this u16 is written to the low u16 for LCD register 0x1EF00X70."
 
-            if(active_framebuffer == 0)
-                gpu_WriteReg32(RGBuponeleft, gpu_ConvertVirtualToPhysical(framebuf0_vaddr));
-            else
-                gpu_WriteReg32(RGBuptwoleft, gpu_ConvertVirtualToPhysical(framebuf0_vaddr));
-
-            if(framebuf1_vaddr == 0)
-            {
-                if(active_framebuffer == 0)
-                    gpu_WriteReg32(RGBuponeright, gpu_ConvertVirtualToPhysical(framebuf0_vaddr));
-                else
-                    gpu_WriteReg32(RGBuptworight, gpu_ConvertVirtualToPhysical(framebuf0_vaddr));
-            }
-            else
-            {
-                if(active_framebuffer == 0)
-                    gpu_WriteReg32(RGBuponeright, gpu_ConvertVirtualToPhysical(framebuf1_vaddr));
-                else
-                    gpu_WriteReg32(RGBuptworight, gpu_ConvertVirtualToPhysical(framebuf1_vaddr));
-            }
-
-            gpu_WriteReg32(framestridetop, framebuf_widthbytesize);
-
-            gpu_WriteReg32(frameformattop, format);
-            gpu_WriteReg32(frameselecttop, framebuf_dispselect);
-        }
-        u8 *base_addr_bottom = (u8*)(GSP_SharedBuff + 0x240 + i * 0x80); //bottom
-        if (*(u8*)(base_addr_bottom + 1)) {
-            *(u8*)(base_addr_bottom + 1) = 0;
-            if (*(u8*)(base_addr_bottom))
-                base_addr_bottom += 0x20; //get the other
-            else
-                base_addr_bottom += 0x4;
-
-            u32 active_framebuffer = *(u32*)(base_addr_bottom); //"0=first, 1=second"
-            u32 framebuf0_vaddr = *(u32*)(base_addr_bottom + 4); //"Framebuffer virtual address, for the main screen this is the 3D left framebuffer"
-            u32 framebuf1_vaddr = *(u32*)(base_addr_bottom + 8); //"For the main screen: 3D right framebuffer address"
-            u32 framebuf_widthbytesize = *(u32*)(base_addr_bottom + 12); //"Value for 0x1EF00X90, controls framebuffer width"
-            u32 format = *(u32*)(base_addr_bottom + 16); //"Framebuffer format, this u16 is written to the low u16 for LCD register 0x1EF00X70."
-            u32 framebuf_dispselect = *(u32*)(base_addr_bottom + 20); //"Value for 0x1EF00X78, controls which framebuffer is displayed"
-            u32 unk = *(u32*)(base_addr_bottom + 24); //"?"
-
-            if(active_framebuffer == 0)
-                gpu_WriteReg32(RGBdownoneleft, gpu_ConvertVirtualToPhysical(framebuf0_vaddr));
-            else
-                gpu_WriteReg32(RGBdowntwoleft, gpu_ConvertVirtualToPhysical(framebuf0_vaddr));
-
-            gpu_WriteReg32(framestridebot, framebuf_widthbytesize);
-
-            gpu_WriteReg32(frameformatbot, format);
-            gpu_WriteReg32(frameselectbot, framebuf_dispselect);
-        }
-    }
-
-    return;
+    //DEBUG("offset=0x%08x\n", offset);
+	//DEBUG("base_addr=0x%08x\n", base_addr);
+	return base_addr;
 }
 
 u8* gpu_GetPhysicalMemoryBuff(u32 addr)

@@ -76,11 +76,11 @@ bool threads_IsThreadActive(s32 id)
         return false;
 
     case WAITING_ARB:
-        THREADDEBUG("Thread is %d is stuck in arbitration.\n", id);
+        //THREADDEBUG("Thread is %d is stuck in arbitration.\n", id);
         return false;
 
     case WAITING_SYNC:
-        THREADDEBUG("Wait-list for thread %d:\n", id);
+        //THREADDEBUG("Wait-list for thread %d:\n", id);
 
         if(threads[id].wait_all) {
             ret = true;
@@ -100,8 +100,8 @@ bool threads_IsThreadActive(s32 id)
                     DEBUG("handle_types[hi->type].fnWaitSynchronization == NULL type %x\n", hi->type);
                     return true;
                 }
-                THREADDEBUG("    %08x, type=%s, waiting=%s\n", handle, handle_types[hi->type].name,
-                            is_waiting ? "true" : "false");
+                //THREADDEBUG("    %08x, type=%s, waiting=%s\n", handle, handle_types[hi->type].name,
+                //            is_waiting ? "true" : "false");
 
                 if(is_waiting)
                     ret = false;
@@ -128,8 +128,8 @@ bool threads_IsThreadActive(s32 id)
                 bool is_waiting = false;
                 handle_types[hi->type].fnWaitSynchronization(hi, &is_waiting);
 
-                THREADDEBUG("    %08x, type=%s, waiting=%s\n", handle, handle_types[hi->type].name,
-                            is_waiting ? "true" : "false");
+                //THREADDEBUG("    %08x, type=%s, waiting=%s\n", handle, handle_types[hi->type].name,
+                //            is_waiting ? "true" : "false");
 
                 if(!ret && !is_waiting) {
                     if (current_thread == id)
@@ -180,7 +180,7 @@ void threads_Switch(/*u32 from,*/ u32 to)
     u32 from = current_thread;
 
     if (from == to) {
-        THREADDEBUG("Trying to switch to current thread..\n");
+        //THREADDEBUG("Trying to switch to current thread..\n");
         return;
     }
 
@@ -191,7 +191,7 @@ void threads_Switch(/*u32 from,*/ u32 to)
     }
 
     if (current_thread != -1) {
-        THREADDEBUG("Thread switch %d->%d (%08X->%08X)\n", from, to, threads[from].handle, threads[to].handle);
+        //THREADDEBUG("Thread switch %d->%d (%08X->%08X)\n", from, to, threads[from].handle, threads[to].handle);
         arm11_SaveContext(&threads[from]);
     }
 
@@ -221,7 +221,7 @@ void threads_DoReschedule()
         if(t == cur_thread) continue;
 
         if (!threads_IsThreadActive(t)) {
-            THREADDEBUG("Skipping thread %d..\n", t);
+            //THREADDEBUG("Skipping thread %d..\n", t);
             continue;
         }
 
@@ -310,7 +310,7 @@ void threads_Execute()
         }
 
         if (!threads_IsThreadActive(t)) {
-            THREADDEBUG("Skipping thread %d..\n", t);
+            //THREADDEBUG("Skipping thread %d..\n", t);
             continue;
         }
         nothreadused = false;
