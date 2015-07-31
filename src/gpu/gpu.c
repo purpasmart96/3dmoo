@@ -28,6 +28,8 @@
 #include "mem.h"
 #include "gpu.h"
 
+#include "vec4.h"
+
 #define GSP_ENABLE_LOG
 u32 GPU_Regs[0xFFFF]; //do they all exist don't know but well
 
@@ -40,17 +42,25 @@ u32 VS_FloatUniformSetUpTempBuffer[4];
 u32 render_addr = 0; //Can these be removed?
 u32 unknown_addr = 0;
 
-extern int noscreen;
 
+clov4 make_vec4_from_vec3(clov3 xyz, u8 w)
+{
+	clov4 m = { { xyz.v[0], xyz.v[1], xyz.v[2], w } };
+	return m;
+}
+
+
+extern int noscreen;
+Regs g_regs;
 void gpu_Init()
 {
     LINEAR_MemoryBuff = malloc(0x8000000);
-    VRAM_MemoryBuff = malloc(0x800000);//malloc(0x600000);
-    GSP_SharedBuff = malloc(GSP_Shared_Buff_Size);
+    VRAM_MemoryBuff = malloc(0x600000);//malloc(0x600000);
+	GSP_SharedBuff = malloc(GSP_SHARED_BUFF_SIZE);
 
     memset(LINEAR_MemoryBuff, 0, 0x8000000);
     memset(VRAM_MemoryBuff, 0, 0x600000);
-    memset(GSP_SharedBuff, 0, GSP_Shared_Buff_Size);
+	memset(GSP_SharedBuff, 0, GSP_SHARED_BUFF_SIZE);
     memset(GPU_ShaderCodeBuffer, 0, 0xFFFF * 4);
 
     gpu_WriteReg32(framebuffer_top_size, 0x019000f0);
@@ -66,34 +76,180 @@ void gpu_Init()
     //mem_Write32(0x1FF81080, (u32)0.0f);
 }
 
-u32 gpu_ConvertVirtualToPhysical(u32 addr) //todo
+u32 gpu_ConvertVirtualToPhysical(u32 addr)
 {
-    if (addr >= 0x14000000 && addr < 0x1C000000)return addr + 0xC000000; //FCRAM
-    if (addr >= 0x1F000000 && addr < 0x1F600000)return addr - 0x7000000; //VRAM
-    GPUDEBUG("Can't convert virtual to physical %08x\n",addr);
-    return 0;
+	if (addr == 0) {
+        return 0;
+    } else if (addr >= 0x1F000000 && addr < 0x1F600000) {
+		return addr - 0x1F000000 + 0x18000000;
+	} else if (addr >= 0x14000000 && addr < 0x1C000000) {
+       return addr - 0x14000000 + 0x08000000;
+    } else if (addr >= 0x1FF00000 && addr < 0x1FF80000) {
+        return addr - 0x1FF00000 + 0x1FF00000;
+    } else if (addr >= 0x1EC00000 && addr < 0x1FC00000) {
+        return addr - 0x1EC00000 + 0x10100000;
+	}
+
+	ERROR("Unknown virtual address @ 0x%08x\n", addr);
+	// To help with debugging, set bit on address so that it's obviously invalid.
+	return addr | 0x80000000;
 }
 
-u32 gpu_GetSizeOfWidth(u16 val) //this is the size of pixel
+u32 gpu_ConvertPhysicalToVirtual(u32 addr)
 {
-    switch (val&0x7000) { //check this
-    case 0x0000: //RGBA8
+    if (addr == 0) {
+	    return addr;
+    } else if (addr >= 0x18000000 && addr < 0x18600000) {
+        return addr - 0x18000000 + 0x1F000000;
+    } else if (addr >= 0x20000000 && addr < 0x28000000) {
+        return addr - 0x20000000 + 0x14000000;
+    } else if (addr >= 0x10100000 && addr < 0x11100000) {
+        return addr - 0x10100000 + 0x1EC00000;
+    } else {
+        GPUDEBUG("Can't convert physical to virtual %08x\n", addr);
+        return addr;
+    } 
+}
+
+u8* gpu_GetPhysicalMemoryBuff(u32 addr)
+{
+	if (addr >= 0x18000000 && addr < 0x18600000)
+		return VRAM_MemoryBuff + (addr - 0x18000000);
+	if (addr >= 0x20000000 && addr < 0x28000000)
+		return LINEAR_MemoryBuff + (addr - 0x20000000);
+	return NULL;
+}
+
+u32 gpu_GetPhysicalMemoryRestSize(u32 addr)
+{
+	if (addr >= 0x18000000 && addr < 0x18600000)
+        return addr - 0x18000000;
+	if (addr >= 0x20000000 && addr < 0x28000000)
+        return addr - 0x20000000;
+	return 0;
+}
+
+u32 gpu_BytesPerPixel(u32 pixel_format)
+{
+	switch (pixel_format) {
+    case 0: //RGBA8
         return 4;
-    case 0x1000: //RGB8
+    case 1: //RGB8
         return 3;
-    case 0x2000: //RGB565
+    case 2: //RGB565
         return 2;
-    case 0x3000://RGB5A1
+    case 3: //RGB5A1
         return 2;
-    case 0x4000://RGBA4
+    case 4: //RGBA4
         return 2;
     default:
-        GPUDEBUG("unknown len %04x\n",val);
+		GPUDEBUG("Unknown color type %04x\n", pixel_format);
         return 2;
     }
 }
 
-static void updateGPUintreg(u32 data, u32 ID, u8 mask)
+u32 gpu_BytesPerColorPixel(u32 format)
+{
+	switch (format) {
+	case 0: //RGBA8
+		return 4;
+	case 1: //RGB8
+		return 3;
+	case 2: //RGB5A1
+	case 3: //RGB565
+	case 4: //RGBA4
+		return 2;
+	default:
+		GPUDEBUG("Unknown color format %u\n", format);
+	}
+}
+
+// Returns the number of bytes in the specified depth format
+u32 gpu_BytesPerDepthPixel(u32 format)
+{
+	switch (format) {
+	case 0: //D16
+		return 2;
+	case 2: //D24
+		return 3;
+	case 3: //D24S8
+		return 4;
+	default:
+		GPUDEBUG("Unknown depth format %u\n", format);
+		return 2;
+	}
+}
+
+// Returns the number of bits per depth component of the specified depth format
+u32 gpu_DepthBitsPerPixel(u32 format)
+{
+	switch (format) {
+	case 0: //D16
+		return 16;
+	case 2: //D24
+	case 3: //D24S8
+		return 24;
+	default:
+		GPUDEBUG("Unknown depth format %u\n", format);
+	}
+}
+
+u32 gpu_DecodeAddressRegister(u32 register_value) {
+	return register_value * 8;
+}
+
+u32 gpu_ColorBufferPhysicalAddress() {
+	u32 color_buffer_address = GPU_Regs[COLOR_BUFFER_ADDRESS];
+	return gpu_DecodeAddressRegister(color_buffer_address);
+}
+
+u32 gpu_DepthBufferPhysicalAddress() {
+	u32 depth_buffer_address = GPU_Regs[DEPTH_BUFFER_ADDRESS];
+	return gpu_DecodeAddressRegister(depth_buffer_address);
+}
+
+u32 gpu_GetWidth() {
+	u32 width = GPU_Regs[FRAME_BUFFER_DIM] & 0xFFFF;
+	return width;
+}
+
+u32 gpu_GetHeight() {
+	u32 height = (GPU_Regs[FRAME_BUFFER_DIM] >> 12) & 0xFFFF;
+	return height + 1;
+}
+
+/*
+void SetBufferSwap(u32 screen, FrameBufferInfo info)
+{
+	Regs g_regs;
+	u32 base_address = 0x400000;
+	u32 phys_address_left = gpu_ConvertVirtualToPhysical(info.address_left);
+	u32 phys_address_right = gpu_ConvertVirtualToPhysical(info.address_right);
+	if (info.active_fb == 0) {
+		gpu_WriteReg32(base_address + 4 * (u32)(g_regs.framebuffer_config[screen].address_left1), 4, &phys_address_left);
+		gpu_WriteReg32(base_address + 4 * (u32)(g_regs.framebuffer_config[screen].address_right1), 4, &phys_address_right);
+	}
+	else {
+		gpu_WriteReg32(base_address + 4 * (u32)(g_regs.framebuffer_config[screen].address_left2), 4, &phys_address_left);
+		gpu_WriteReg32(base_address + 4 * (u32)(g_regs.framebuffer_config[screen].address_right2), 4, &phys_address_right);
+	}
+	gpu_WriteReg32(base_address + 4 * (u32)(g_regs.framebuffer_config[screen].stride), 4, &info.stride);
+	gpu_WriteReg32(base_address + 4 * (u32)(g_regs.framebuffer_config[screen].color_format), 4, &info.format);
+	gpu_WriteReg32(base_address + 4 * (u32)(g_regs.framebuffer_config[screen].active_fb), 4, &info.shown_fb);
+}
+*/
+
+/*
+u32 gpu_GetStartAddress() {
+	return gpu_DecodeAddressRegister(address_start);
+}
+
+u32 gpu_GetEndAddress() {
+	return gpu_DecodeAddressRegister(address_end);
+}
+*/
+
+static void gpu_IntRegUpdate(u32 data, u32 ID, u8 mask)
 {
     int i;
     for (i = 0; i < 4; i++) {
@@ -155,7 +311,7 @@ void Stack_Pop(struct Stack *S)
         S->size--;
 }
 
-struct VertexShaderState {
+typedef struct  {
     u32* program_counter;
     u32* program_counter_end;
 
@@ -173,17 +329,17 @@ struct VertexShaderState {
     //status		1				2		RW		1
 
     float* input_register_table[16];
-    struct vec4  temporary_registers[16];
-    u8  address_registers[3]; //loop is also a address_registers
+    vec4  temporary_registers[16];
+    s32  address_registers[3]; //loop is also a address_registers
     bool boolean_registers[16];
     u8 integer_registers[4][3];
 
-    float* output_register_table[16 * 4];
+    vec4 *output_registers[16];
 
     bool status_registers[2];
 
-    /*u32* call_stack_pointer; // TODO: What is the maximal call stack depth?
-    u32 call_stack[16];*/
+    /*u32* call_stack_pointer; // TODO: What is the maximal call stack depth?*/
+    //u32 call_stack[16];
 
     struct Stack call_stack;
     struct Stack call_end_stack;
@@ -194,9 +350,9 @@ struct VertexShaderState {
     struct Stack loop_stack;
     struct Stack loop_int_stack;
     struct Stack loop_end_stack;
-};
+} VertexShaderState;
 
-struct vec4 const_vectors[96];
+vec4 const_vectors[96];
 
 static u32 getattribute_register_map(u32 reg, u32 data1, u32 data2)
 {
@@ -207,17 +363,17 @@ static u32 getattribute_register_map(u32 reg, u32 data1, u32 data2)
     }
 }
 
-static struct OutputVertex buffer[2];
+static OutputVertex buffer[2];
 static int buffer_index = 0; // TODO: reset this on emulation restart
 static int strip_ready = 0;
-static void PrimitiveAssembly_SubmitVertex(struct OutputVertex* vtx)
+static void PrimitiveAssembly_SubmitVertex(OutputVertex* vtx)
 {
-    u32 topology = (GPU_Regs[TriangleTopology] >> 8) & 0x3;
+    u32 topology = (GPU_Regs[TRIANGLE_TOPOLOGY] >> 8) & 0x3;
     switch (topology) {
     case 0://List:
     case 3://ListIndexed:
         if (buffer_index < 2) {
-            memcpy(&buffer[buffer_index++], vtx, sizeof(struct OutputVertex));
+            memcpy(&buffer[buffer_index++], vtx, sizeof(OutputVertex));
         } else {
             buffer_index = 0;
 
@@ -228,12 +384,9 @@ static void PrimitiveAssembly_SubmitVertex(struct OutputVertex* vtx)
     case 1://Strip
     case 2://Fan:
         if(strip_ready) {
-            // TODO: Should be "buffer[0], buffer[1], vtx" instead!
-            // Not quite sure why we need this order for things to show up properly.
-            // Maybe a bug in the rasterizer?
             Clipper_ProcessTriangle(&buffer[0], &buffer[1], vtx);
         }
-        memcpy(&buffer[buffer_index], vtx, sizeof(struct OutputVertex));
+        memcpy(&buffer[buffer_index], vtx, sizeof(OutputVertex));
         if(topology == 1) { //Strip
             strip_ready |= (buffer_index == 1);
             buffer_index = !buffer_index;
@@ -332,7 +485,7 @@ static bool ShaderCMP(float a, float b, u32 mode)
 
 //#define printfunc
 
-void loop(struct VertexShaderState* state, u32 offset, u32 num_instruction, u32 return_offset, u32 int_reg,u32 number_of_rounds)
+void loop(VertexShaderState* state, u32 offset, u32 num_instruction, u32 return_offset, u32 int_reg,u32 number_of_rounds)
 {
 #ifdef printfunc
     DEBUG("callloop %03x %03x %03x %01x\n", offset, num_instruction, return_offset, int_reg);
@@ -343,7 +496,7 @@ void loop(struct VertexShaderState* state, u32 offset, u32 num_instruction, u32 
     Stack_Push(&state->loop_end_stack, return_offset);
 }
 
-void ifcall(struct VertexShaderState* state, u32 offset, u32 num_instruction, u32 return_offset)
+void ifcall(VertexShaderState* state, u32 offset, u32 num_instruction, u32 return_offset)
 {
 #ifdef printfunc
     DEBUG("callif %03x %03x %03x\n", offset, num_instruction, return_offset);
@@ -353,7 +506,7 @@ void ifcall(struct VertexShaderState* state, u32 offset, u32 num_instruction, u3
     Stack_Push(&state->if_end_stack, return_offset);
 }
 
-void call(struct VertexShaderState* state, u32 offset, u32 num_instruction, u32 return_offset)
+void call(VertexShaderState* state, u32 offset, u32 num_instruction, u32 return_offset)
 {
 #ifdef printfunc
     DEBUG("callnorm %03x %03x %03x\n", offset, num_instruction, return_offset);
@@ -363,7 +516,7 @@ void call(struct VertexShaderState* state, u32 offset, u32 num_instruction, u32 
     Stack_Push(&state->call_end_stack, return_offset);
 }
 
-void ProcessShaderCode(struct VertexShaderState* state)
+void ProcessShaderCode(VertexShaderState* state)
 {
     float should_not_be_used = 0;
     while (true) {
@@ -411,17 +564,16 @@ void ProcessShaderCode(struct VertexShaderState* state)
         s32 idx = (instr_common_idx(instr) == 0) ? 0 : state->address_registers[instr_common_idx(instr) - 1];
         u32 instr_common_src1v = instr_common_src1(instr) + idx;
         const float* src1_ = (instr_common_src1v < 0x10) ? state->input_register_table[instr_common_src1v]
-                             : (instr_common_src1v < 0x20) ? &state->temporary_registers[instr_common_src1v - 0x10].v[0]
-                             : (instr_common_src1v < 0x80) ? &const_vectors[instr_common_src1v - 0x20].v[0]
+                             : (instr_common_src1v < 0x20) ? &state->temporary_registers[instr_common_src1v - 0x10].v
+                             : (instr_common_src1v < 0x80) ? &const_vectors[instr_common_src1v - 0x20].v
                              : &should_not_be_used;
 
         u32 instr_common_src2v = instr_common_src2(instr);
         const float* src2_ = (instr_common_src2v < 0x10) ? state->input_register_table[instr_common_src2v]
-                             : &state->temporary_registers[instr_common_src2v - 0x10].v[0];
+                             : &state->temporary_registers[instr_common_src2v - 0x10].v;
         u32 instr_common_destv = instr_common_dest(instr);
-        float* dest = (instr_common_destv < 8) ? state->output_register_table[4 * instr_common_destv]
-                      : (instr_common_destv < 0x10) ? (float*)0
-                      : (instr_common_destv < 0x20) ? &state->temporary_registers[instr_common_destv - 0x10].v[0]
+		float* dest = (instr_common_destv < 0x10) ? &state->output_registers[instr_common_destv]
+                      : (instr_common_destv < 0x20) ? &state->temporary_registers[instr_common_destv - 0x10].v
                       : &should_not_be_used;
 
         u32 swizzle = swizzle_data[instr_common_operand_desc_id(instr)];
@@ -440,16 +592,16 @@ void ProcessShaderCode(struct VertexShaderState* state)
         };
 
         if (swizzle & (1 << 13)) {
-            src2[0] = src2[0] * (-1.f);
-            src2[1] = src2[1] * (-1.f);
-            src2[2] = src2[2] * (-1.f);
-            src2[3] = src2[3] * (-1.f);
+            src2[0] = -src2[0];
+            src2[1] = -src2[1];
+            src2[2] = -src2[2];
+            src2[3] = -src2[3];
         }
         if(swizzle & (1 << 4)) {
-            src1[0] = src1[0] * (-1.f);
-            src1[1] = src1[1] * (-1.f);
-            src1[2] = src1[2] * (-1.f);
-            src1[3] = src1[3] * (-1.f);
+            src1[0] = -src1[0];
+            src1[1] = -src1[1];
+            src1[2] = -src1[2];
+            src1[3] = -src1[3];
         }
 
 #ifdef printfunc
@@ -497,7 +649,7 @@ void ProcessShaderCode(struct VertexShaderState* state)
             if (swizzle_DestComponentEnabled(3, swizzle)) dest[3] = src2[3];
             break;
         }
-        case SHDR_EXP: {
+        case SHDR_EX2: {
 #ifdef printfunc
             DEBUG("EXP %02X %02X %02X %08x\n", instr_common_destv, instr_common_src1v, instr_common_src2v, swizzle);
 #endif
@@ -505,11 +657,11 @@ void ProcessShaderCode(struct VertexShaderState* state)
                 if (!swizzle_DestComponentEnabled(i, swizzle))
                     continue;
 
-                dest[i] = powf(2.f, src1[0]);
+                dest[i] = exp2(src1[i]);
             }
             break;
         }
-        case SHDR_LOG: {
+        case SHDR_LG2: {
 #ifdef printfunc
             DEBUG("LOG %02X %02X %02X %08x\n", instr_common_destv, instr_common_src1v, instr_common_src2v, swizzle);
 #endif
@@ -517,7 +669,7 @@ void ProcessShaderCode(struct VertexShaderState* state)
                 if (!swizzle_DestComponentEnabled(i, swizzle))
                     continue;
 
-                dest[i] = log2f(src1[0]);
+                dest[i] = log2f(src1[i]);
             }
             break;
         }
@@ -891,21 +1043,20 @@ void ProcessShaderCode(struct VertexShaderState* state)
             //mad
             u32 instr_common_src1v = instr_mad_src1(instr) + idx;
             const float* src1_ = (instr_common_src1v < 0x10) ? state->input_register_table[instr_common_src1v]
-                : (instr_common_src1v < 0x20) ? &state->temporary_registers[instr_common_src1v - 0x10].v[0]
-                : (instr_common_src1v < 0x80) ? &const_vectors[instr_common_src1v - 0x20].v[0]
+                : (instr_common_src1v < 0x20) ? &state->temporary_registers[instr_common_src1v - 0x10].v
+                : (instr_common_src1v < 0x80) ? &const_vectors[instr_common_src1v - 0x20].v
                 : (float*)0;
 
             u32 instr_common_src2v = instr_mad_src2(instr);
             const float* src2_ = (instr_common_src2v < 0x10) ? state->input_register_table[instr_common_src2v]
-                : &state->temporary_registers[instr_common_src2v - 0x10].v[0];
+                : &state->temporary_registers[instr_common_src2v - 0x10].v;
             u32 instr_common_src3v = instr_mad_src3(instr);
             const float* src3_ = (instr_common_src3v < 0x10) ? state->input_register_table[instr_common_src3v]
-                : &state->temporary_registers[instr_common_src3v - 0x10].v[0];
+                : &state->temporary_registers[instr_common_src3v - 0x10].v;
 
             u32 instr_common_destv = instr_mad_dest(instr);
-            float* dest = (instr_common_destv < 8) ? state->output_register_table[4 * instr_common_destv]
-                : (instr_common_destv < 0x10) ? (float*)0
-                : (instr_common_destv < 0x20) ? &state->temporary_registers[instr_common_destv - 0x10].v[0]
+            float* dest = (instr_common_destv < 0x10) ? &state->output_registers[instr_common_destv]
+                : (instr_common_destv < 0x20) ? &state->temporary_registers[instr_common_destv - 0x10].v
                 : (float*)0;
 
             float src1[4] = {
@@ -929,22 +1080,22 @@ void ProcessShaderCode(struct VertexShaderState* state)
             };
 
             if (swizzle & 0x10) {
-                src1[0] = src1[0] * (-1.f);
-                src1[1] = src1[1] * (-1.f);
-                src1[2] = src1[2] * (-1.f);
-                src1[3] = src1[3] * (-1.f);
+                src1[0] = -src1[0];
+                src1[1] = -src1[1];
+                src1[2] = -src1[2];
+                src1[3] = -src1[3];
             }
             if (swizzle&(1 << 0xD)) {
-                src2[0] = src2[0] * (-1.f);
-                src2[1] = src2[1] * (-1.f);
-                src2[2] = src2[2] * (-1.f);
-                src2[3] = src2[3] * (-1.f);
+                src2[0] = -src2[0];
+                src2[1] = -src2[1];
+                src2[2] = -src2[2];
+                src2[3] = -src2[3];
             }
             if (swizzle&(1 << 0x17)) {
-                src3[0] = src3[0] * (-1.f);
-                src3[1] = src3[1] * (-1.f);
-                src3[2] = src3[2] * (-1.f);
-                src3[3] = src3[3] * (-1.f);
+                src3[0] = -src3[0];
+                src3[1] = -src3[1];
+                src3[2] = -src3[2];
+                src3[3] = -src3[3];
             }
 
 
@@ -971,12 +1122,15 @@ void ProcessShaderCode(struct VertexShaderState* state)
 
 }
 
-void RunShader(struct vec4 input[17], int num_attributes, struct OutputVertex *ret)
+void RunShader(vec4 input[16], int num_attributes, OutputVertex *ret)
 {
-    struct VertexShaderState state;
+    VertexShaderState state;
 
     //const u32* main = &shader_memory[registers.Get<Regs::VSMainOffset>().offset_words];
-    state.program_counter = &GPU_ShaderCodeBuffer[GPU_Regs[VS_MainOffset] & 0xFFFF];
+	state.program_counter = &GPU_ShaderCodeBuffer[GPU_Regs[VS_START_ADDR] & 0xFFFF];
+	state.status_registers[0] = false;
+	state.status_registers[1] = false;
+
 
     // Setup input register table
 
@@ -985,10 +1139,10 @@ void RunShader(struct vec4 input[17], int num_attributes, struct OutputVertex *r
         state.input_register_table[i] = &dummy_register;
 
     for (int i = 0; i<num_attributes; i++)
-        state.input_register_table[getattribute_register_map(i, GPU_Regs[VS_InputRegisterMap], GPU_Regs[VS_InputRegisterMap + 1])] = &input[i].v[0];
+		state.input_register_table[getattribute_register_map(i, GPU_Regs[VS_INPUT_REGISTER_MAP], GPU_Regs[VS_INPUT_REGISTER_MAP + 1])] = &input[i].v;
 
     for (int i = 0; i < 16; i++)
-        state.boolean_registers[i] = GPU_Regs[0x2B0]&(1<<i);
+		state.boolean_registers[i] = GPU_Regs[VS_BOOL_UNIFORM] & (1 << i);
 
     for (int i = 0; i < 3; i++)
         state.address_registers[i] = 0;
@@ -996,12 +1150,11 @@ void RunShader(struct vec4 input[17], int num_attributes, struct OutputVertex *r
     //set up integer
     for (int i = 0; i < 4; i++)
         for (int j = 0; j < 3; j++)
-            state.integer_registers[i][j] = ((GPU_Regs[VS_INTUNIFORM_I0 + i]>>(j*8))&0xFF);
+			state.integer_registers[i][j] = ((GPU_Regs[VS_INT0_UNIFORM + i] >> (j * 8)) & 0xFF);
 
     // Setup output register table
-    //struct OutputVertex ret;
     for (int i = 0; i < 7; ++i) {
-        u32 output_register_map = GPU_Regs[VS_VertexAttributeOutputMap + i];
+		u32 output_register_map = GPU_Regs[VS_ATTRIBUTE_OUTPUT_MAP + i];
 
         u32 semantics[4] = {
             (output_register_map >> 0) & 0x1F, (output_register_map >> 8) & 0x1F,
@@ -1009,12 +1162,21 @@ void RunShader(struct vec4 input[17], int num_attributes, struct OutputVertex *r
         };
 
         for (int comp = 0; comp < 4; ++comp)
-            state.output_register_table[4 * i + comp] = ((float*)ret) + semantics[comp];
+			state.output_registers[i + comp] = ((float*)&ret) + semantics[comp];
+/*
+        for (int comp = 0; comp < 4; ++comp) {
+			float32* out = ((float32*)&ret) + semantics[comp];
+            if (semantics[comp] != GPU_Regs[VS_INVALID_ADDRESS]) {
+				//out = &state.output_registers[i];
+            } else {
+                // Zero output so that attributes which aren't output won't have denormals in them,
+                // which would slow us down later.
+                memset(out, 0, sizeof(*out));
+            }
+        }
+*/
     }
 
-
-    state.status_registers[0] = false;
-    state.status_registers[1] = false;
     /*int k;
     for (k = 0; k < 16; k++)state.call_stack[k] = VertexShaderState_INVALID_ADDRESS;
     state.call_stack_pointer = &state.call_stack[1];*/
@@ -1037,19 +1199,20 @@ void RunShader(struct vec4 input[17], int num_attributes, struct OutputVertex *r
     //Stack_Push(&state.loop_end_stack, VertexShaderState_INVALID_ADDRESS);
 
     for (int i = 0; i < 16; i++) {
-        for (int j = 0; j < 4; j++)state.temporary_registers[i].v[j] = (0.f);
+        for (int j = 0; j < 4; j++)state.temporary_registers[i].v[4] = (0.f);
     }
-    ret->texcoord0.v[0] = 0.f;
-    ret->texcoord0.v[1] = 0.f;
+
+    ret->texcoord0.x = 0.f;
+    ret->texcoord0.y = 0.f;
 
     ProcessShaderCode(&state);
 
     GPUDEBUG("Output vertex: pos (%.2f, %.2f, %.2f, %.2f), col(%.2f, %.2f, %.2f, %.2f), tc0(%.2f, %.2f)\n",
              ret->position.v[0], ret->position.v[1], ret->position.v[2], ret->position.v[3],
              ret->color.v[0], ret->color.v[1], ret->color.v[2], ret->color.v[3],
-             ret->texcoord0.v[0], ret->texcoord0.v[1]);
+             ret->texcoord0.x, ret->texcoord0.y);
 
-    //return ret;
+    //return *ret;
 }
 
 static u32 GetComponent(u32 n,u32* data)
@@ -1095,9 +1258,9 @@ void gpu_WriteID(u16 ID, u8 mask, u32 size, u32* buffer)
     u32 i;
     switch (ID) {
     // It seems like these trigger vertex rendering
-    case TriggerDraw:
-    case TriggerDrawIndexed: {
-        u32* attribute_config = &GPU_Regs[VertexAttributeConfig];
+    case TRIGGER_DRAW:
+    case TRIGGER_DRAW_INDEXED: {
+        u32* attribute_config = &GPU_Regs[ATTRIBUTE_CONFIG];
         u32 base_address = (*attribute_config) << 3;
         // Information about internal vertex attributes
         u8* vertex_attribute_sources[16];
@@ -1135,13 +1298,12 @@ void gpu_WriteID(u16 ID, u8 mask, u32 size, u32* buffer)
             }
         }
         // Load vertices
-        bool is_indexed = (ID == TriggerDrawIndexed);
-        //const auto& index_info = registers.Get<Regs::IndexArrayConfig>();
-        u32 index_info_offset = GPU_Regs[IndexArrayConfig] & 0x7FFFFFFF;
+        bool is_indexed = (ID == TRIGGER_DRAW_INDEXED);
+        u32 index_info_offset = GPU_Regs[INDEX_ARRAY_CONFIG] & 0x7FFFFFFF;
         const u8* index_address_8 = (u8*)gpu_GetPhysicalMemoryBuff(base_address + index_info_offset);
         const u16* index_address_16 = (u16*)index_address_8;
-        bool index_u16 = (GPU_Regs[IndexArrayConfig] >> 31);
-        for (u32 index = 0; index < GPU_Regs[NumVertices]; index++) {
+        bool index_u16 = (GPU_Regs[INDEX_ARRAY_CONFIG] >> 31);
+        for (u32 index = 0; index < GPU_Regs[NUMBER_OF_VERTICES]; index++) {
             int vertex = is_indexed ? (index_u16 ? index_address_16[index] : index_address_8[index]) : index;
 
             if (is_indexed) {
@@ -1149,7 +1311,7 @@ void gpu_WriteID(u16 ID, u8 mask, u32 size, u32* buffer)
             }
 
             // Initialize data for the current vertex
-            struct vec4 input[17];
+			vec4 input[16];
             u8 NumTotalAttributes = (attribute_config[2] >> 28) + 1;
             for (int i = 0; i < NumTotalAttributes; i++) {
                 for (u32 comp = 0; comp < vertex_attribute_elements[i]; comp++) {
@@ -1167,7 +1329,7 @@ void gpu_WriteID(u16 ID, u8 mask, u32 size, u32* buffer)
                              input[i].v[comp]);
                 }
             }
-            struct OutputVertex output;
+            OutputVertex output;
             RunShader(input, NumTotalAttributes, &output);
             //VertexShader::OutputVertex output = VertexShader::RunShader(input, attribute_config.GetNumTotalAttributes());
 
@@ -1186,64 +1348,63 @@ void gpu_WriteID(u16 ID, u8 mask, u32 size, u32* buffer)
 
     }
     // Load shader program code
-    case VS_LoadProgramData:
-    case VS_LoadProgramData + 1:
-    case VS_LoadProgramData + 2:
-    case VS_LoadProgramData + 3:
-    case VS_LoadProgramData + 4:
-    case VS_LoadProgramData + 5:
-    case VS_LoadProgramData + 6:
-    case VS_LoadProgramData + 7:
+	case VS_PROGRAM_DATA1:
+	case VS_PROGRAM_DATA2:
+	case VS_PROGRAM_DATA3:
+	case VS_PROGRAM_DATA4:
+	case VS_PROGRAM_DATA5:
+	case VS_PROGRAM_DATA6:
+	case VS_PROGRAM_DATA7:
+	case VS_PROGRAM_DATA8:
         if (mask != 0xF) {
-            GPUDEBUG("abnormal VS_LoadProgramData %0x1 %0x3\n", mask, size);
+            GPUDEBUG("Abnormal VS_PROGRAM_DATA %0x1 %0x3\n", mask, size);
         }
         for (i = 0; i < size; i++)
-            GPU_ShaderCodeBuffer[GPU_Regs[VS_BeginLoadProgramData]++] = *(buffer + i);
+			GPU_ShaderCodeBuffer[GPU_Regs[VS_PROGRAM_ADDR]++] = *(buffer + i);
         break;
 
-    case VS_LoadSwizzleData:
-
-    case VS_LoadSwizzleData + 1:
-    case VS_LoadSwizzleData + 2:
-    case VS_LoadSwizzleData + 3:
-    case VS_LoadSwizzleData + 4:
-    case VS_LoadSwizzleData + 5:
-    case VS_LoadSwizzleData + 6:
-    case VS_LoadSwizzleData + 7:
+	case VS_PROGRAM_SWIZZLE_DATA:
+	case VS_PROGRAM_SWIZZLE_DATA + 1:
+	case VS_PROGRAM_SWIZZLE_DATA + 2:
+	case VS_PROGRAM_SWIZZLE_DATA + 3:
+	case VS_PROGRAM_SWIZZLE_DATA + 4:
+	case VS_PROGRAM_SWIZZLE_DATA + 5:
+	case VS_PROGRAM_SWIZZLE_DATA + 6:
+	case VS_PROGRAM_SWIZZLE_DATA + 7:
         if (mask != 0xF) {
             GPUDEBUG("abnormal VSLoadSwizzleData %0x1 %0x3\n", mask, size);
         }
         for (i = 0; i < size; i++)
-            swizzle_data[GPU_Regs[VS_BeginLoadSwizzleData]++] = *(buffer + i);
+			swizzle_data[GPU_Regs[VS_PROGRAM_SWIZZLE_ADDR]++] = *(buffer + i);
         break;
 
-    case VS_resttriangel:
+    case VS_REST_TRIANGEL:
         if (*buffer & 0x1) //todo more checks
         {
             buffer_index = 0;
             strip_ready = 0;
         }
-        updateGPUintreg(*buffer, ID, mask);
+        gpu_IntRegUpdate(*buffer, ID, mask);
         break;
-    case VS_FloatUniformSetup:
-        updateGPUintreg(*buffer, ID, mask);
+	case VS_FLOAT_UNIFORM_SETUP:
+        gpu_IntRegUpdate(*buffer, ID, mask);
         buffer++;
         size--;
-    case VS_FloatUniformSetup + 1:
-    case VS_FloatUniformSetup + 2:
-    case VS_FloatUniformSetup + 3:
-    case VS_FloatUniformSetup + 4:
-    case VS_FloatUniformSetup + 5:
-    case VS_FloatUniformSetup + 6:
-    case VS_FloatUniformSetup + 7:
-    case VS_FloatUniformSetup + 8:
+	case VS_FLOAT_UNIFORM_SETUP + 1:
+	case VS_FLOAT_UNIFORM_SETUP + 2:
+	case VS_FLOAT_UNIFORM_SETUP + 3:
+	case VS_FLOAT_UNIFORM_SETUP + 4:
+	case VS_FLOAT_UNIFORM_SETUP + 5:
+	case VS_FLOAT_UNIFORM_SETUP + 6:
+	case VS_FLOAT_UNIFORM_SETUP + 7:
+	case VS_FLOAT_UNIFORM_SETUP + 8:
         for (i = 0; i < size; i++) {
             VS_FloatUniformSetUpTempBuffer[VS_FloatUniformSetUpTempBufferCurrent++] = *(buffer + i);
-            bool isfloat32 = (GPU_Regs[VS_FloatUniformSetup] >> 31) == 1;
+			bool isfloat32 = (GPU_Regs[VS_FLOAT_UNIFORM_SETUP] >> 31) == 1;
 
             if (VS_FloatUniformSetUpTempBufferCurrent == (isfloat32 ? 4 : 3)) {
                 VS_FloatUniformSetUpTempBufferCurrent = 0;
-                u8 index = GPU_Regs[VS_FloatUniformSetup] & 0x7F;
+				u8 index = GPU_Regs[VS_FLOAT_UNIFORM_SETUP] & 0x7F;
                 if (index > 95) {
                     GPUDEBUG("Invalid VS uniform index %02x\n", index);
                     break;
@@ -1266,7 +1427,7 @@ void gpu_WriteID(u16 ID, u8 mask, u32 size, u32* buffer)
                          const_vectors[index].v[0], const_vectors[index].v[1], const_vectors[index].v[2],
                          const_vectors[index].v[3]);
                 // TODO: Verify that this actually modifies the register!
-                GPU_Regs[VS_FloatUniformSetup]++;
+				GPU_Regs[VS_FLOAT_UNIFORM_SETUP]++;
             }
         }
         break;
@@ -1278,7 +1439,7 @@ void gpu_WriteID(u16 ID, u8 mask, u32 size, u32* buffer)
 
         break;
     default:
-        updateGPUintreg(*buffer, ID, mask);
+        gpu_IntRegUpdate(*buffer, ID, mask);
     }
 }
 
@@ -1331,11 +1492,12 @@ void gpu_UpdateFramebufferAddr(u32 addr, bool bottom)
     return;
 }
 
+
+
 void gpu_UpdateFramebuffer()
 {
     //we use the last in buffer with flag set
-    int i;
-    for (i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++) {
         u8 *base_addr_top = (u8*)(GSP_SharedBuff + 0x200 + i * 0x80); //top
         if (*(u8*)(base_addr_top + 1)) {
             *(u8*)(base_addr_top + 1) = 0;
@@ -1406,17 +1568,4 @@ void gpu_UpdateFramebuffer()
     }
 
     return;
-}
-
-u8* gpu_GetPhysicalMemoryBuff(u32 addr)
-{
-    if (addr >= 0x18000000 && addr < 0x18600000)return VRAM_MemoryBuff + (addr - 0x18000000);
-    if (addr >= 0x20000000 && addr < 0x28000000)return LINEAR_MemoryBuff + (addr - 0x20000000);
-    return NULL;
-}
-u32 gpu_GetPhysicalMemoryRestSize(u32 addr)
-{
-    if (addr >= 0x18000000 && addr < 0x18600000)return addr - 0x18000000;
-    if (addr >= 0x20000000 && addr < 0x28000000)return addr - 0x20000000;
-    return 0;
 }

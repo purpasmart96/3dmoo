@@ -30,15 +30,39 @@
 u32 numReqQueue = 1;
 u32 trigevent = 0;
 
+Regs g_regs;
+Command cmd;
+
 //#define DUMP_CMDLIST
 
+static clov4 DecodePixel(u8 input_format, const u8* src_pixel)
+{
+	switch (input_format) {
+	case 0: //RGBA8:
+		return DecodeRGBA8(src_pixel);
+
+	case 1: //RGB8:
+		return DecodeRGB8(src_pixel);
+
+	case 2: //RGB565:
+		return DecodeRGB565(src_pixel);
+
+	case 3: //RGB5A1:
+		return DecodeRGB5A1(src_pixel);
+
+	case 4: //RGBA4:
+		return DecodeRGBA4(src_pixel);
+
+	default:
+		GPUDEBUG("Unknown source framebuffer format %x", input_format);
+		return DecodeRGBA8(src_pixel);
+	}
+}
 
 void gsp_ExecuteCommandFromSharedMem()
 {
-    int i;
-
     // For all threads
-    for (i = 0; i < 0x4; i++) {
+    for (int i = 0; i < 0x4; i++) {
         u8* base_addr = (u8*)(GSP_SharedBuff + 0x800 + i * 0x200);
         u32 header = *(u32*)base_addr;
         u32 toprocess = (header >> 8) & 0xFF;
@@ -78,11 +102,12 @@ void gsp_ExecuteCommandFromSharedMem()
             }
 
             case GSP_ID_SET_CMDLIST: { /* GX::SetCmdList Last */
-                u32 addr = *(u32*)(base_addr + (j + 1) * 0x20 + 0x4);
+                u32 address = *(u32*)(base_addr + (j + 1) * 0x20 + 0x4);
                 u32 size = *(u32*)(base_addr + (j + 1) * 0x20 + 0x8);
-                u32 flags = *(u32*)(base_addr + (j + 1) * 0x20 + 0xC);
+                u32 trigger = *(u32*)(base_addr + (j + 1) * 0x20 + 0xC);
 
-                GPUDEBUG("GX SetCommandList Last 0x%08x 0x%08x 0x%08x\n", addr, size, flags);
+                GPUDEBUG("GX SetCommandList Last 0x%08x 0x%08x 0x%08x\n", address, size, trigger);
+
 
 #ifdef DUMP_CMDLIST
                 char name[0x100];
@@ -93,7 +118,7 @@ void gsp_ExecuteCommandFromSharedMem()
 #endif
 
                 u8* buffer = malloc(size);
-                mem_Read(buffer, addr, size);
+                mem_Read(buffer, address, size);
                 gpu_ExecuteCommands(buffer, size);
 
 #ifdef DUMP_CMDLIST
@@ -105,206 +130,243 @@ void gsp_ExecuteCommandFromSharedMem()
             }
 
             case GSP_ID_SET_MEMFILL: { //speedup todo
-                u32 addr1, val1, addrend1, addr2, val2, addrend2, width;
-                addr1 = *(u32*)(base_addr + (j + 1) * 0x20 + 0x4);
-                val1 = *(u32*)(base_addr + (j + 1) * 0x20 + 0x8);
-                addrend1 = *(u32*)(base_addr + (j + 1) * 0x20 + 0xC);
-                addr2 = *(u32*)(base_addr + (j + 1) * 0x20 + 0x10);
-                val2 = *(u32*)(base_addr + (j + 1) * 0x20 + 0x14);
-                addrend2 = *(u32*)(base_addr + (j + 1) * 0x20 + 0x18);
-                width = *(u32*)(base_addr + (j + 1) * 0x20 + 0x1C);
 
-                GPUDEBUG("GX SetMemoryFill 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X\r\n", addr1, val1, addrend1, addr2, val2, addrend2, width);
-                if (addr1 - 0x1f000000 > 0x600000 || addrend1 - 0x1f000000 > 0x600000) {
+				u32 start1 = *(u32*)(base_addr + (j + 1) * 0x20 + 0x4);
+				u32 value1 = *(u32*)(base_addr + (j + 1) * 0x20 + 0x8);
+				u32 end1 = *(u32*)(base_addr + (j + 1) * 0x20 + 0xC);
+				u32 start2 = *(u32*)(base_addr + (j + 1) * 0x20 + 0x10);
+				u32 value2 = *(u32*)(base_addr + (j + 1) * 0x20 + 0x14);
+				u32 end2 = *(u32*)(base_addr + (j + 1) * 0x20 + 0x18);
+				u16 control1 = *(u32*)(base_addr + (j + 1) * 0x20 + 0x1C);
+				u16 control2 = *(u32*)(base_addr + (j + 1) * 0x20 + 0x1E);
+
+				GPUDEBUG("GX SetMemoryFill 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X\r\n", start1, value1, end1, start2, value2, end2, control1, control2);
+/*
+   
+                g_regs.memory_fill_config[0].address_start = gpu_GetPhysicalMemoryBuff(gpu_ConvertVirtualToPhysical(start1) >> 3);
+                g_regs.memory_fill_config[0].address_end = gpu_GetPhysicalMemoryBuff(gpu_ConvertVirtualToPhysical(end1) >> 3);
+                g_regs.memory_fill_config[0].value_32bit = gpu_GetPhysicalMemoryBuff(gpu_ConvertVirtualToPhysical(value1) >> 3);
+                g_regs.memory_fill_config[0].control = gpu_GetPhysicalMemoryBuff(gpu_ConvertVirtualToPhysical(control1) >> 3);
+
+                g_regs.memory_fill_config[0].address_start = gpu_GetPhysicalMemoryBuff(gpu_ConvertVirtualToPhysical(start1) >> 3);
+                g_regs.memory_fill_config[0].address_end = gpu_GetPhysicalMemoryBuff(gpu_ConvertVirtualToPhysical(end1) >> 3);
+                g_regs.memory_fill_config[0].value_32bit = gpu_GetPhysicalMemoryBuff(gpu_ConvertVirtualToPhysical(value1) >> 3);
+                g_regs.memory_fill_config[0].control = gpu_GetPhysicalMemoryBuff(gpu_ConvertVirtualToPhysical(control1) >> 3);
+                //gpu_WriteReg32((g_regs.memory_fill_config[0].address_start), gpu_ConvertVirtualToPhysical(start1) >> 3);
+	            //gpu_WriteReg32((g_regs.memory_fill_config[0].address_end), gpu_ConvertVirtualToPhysical(end1) >> 3);
+	            //gpu_WriteReg32((g_regs.memory_fill_config[0].value_32bit), gpu_ConvertVirtualToPhysical(value1) >> 3);
+	            //gpu_WriteReg32((g_regs.memory_fill_config[0].control), gpu_ConvertVirtualToPhysical(control1) >> 3);
+
+	            //gpu_WriteReg32((u32)(g_regs.memory_fill_config[1].address_start), gpu_ConvertVirtualToPhysical(start2) >> 3);
+	            //gpu_WriteReg32((u32)(g_regs.memory_fill_config[1].address_end), gpu_ConvertVirtualToPhysical(end2) >> 3);
+	            //gpu_WriteReg32((u32)(g_regs.memory_fill_config[1].value_32bit), gpu_ConvertVirtualToPhysical(value2) >> 3);
+	            //gpu_WriteReg32((u32)(g_regs.memory_fill_config[1].control), gpu_ConvertVirtualToPhysical(control2) >> 3);
+*/
+
+
+                if (start1 - 0x1f000000 > 0x600000 || end1 - 0x1f000000 > 0x600000) {
                     GPUDEBUG("SetMemoryFill into non VRAM not suported\r\n");
                 } else {
-                    u32 size = gpu_GetSizeOfWidth(width & 0xFFFF);
-                    u32 k;
-                    for(k = addr1; k < addrend1; k+=size) {
-                        s32 m;
-                        for(m = size - 1; m >= 0; m--)
+                    u32 size = gpu_BytesPerPixel(control1);
+
+                    for(u32 k = start1; k < end1; k+=size) {
+                        for(s32 m = size - 1; m >= 0; m--)
                         {
-                            VRAM_MemoryBuff[m + (k - 0x1F000000)] = (u8)(val1 >> (m * 8));
+                            VRAM_MemoryBuff[m + (k - 0x1F000000)] = (u8)(value1 >> (m * 8));
                         }
                     }
                 }
-                if (addr2 - 0x1f000000 > 0x600000 || addrend2 - 0x1f000000 > 0x600000) {
-                    if (addr2 && addrend2)
+                if (start2 - 0x1f000000 > 0x600000 || end2 - 0x1f000000 > 0x600000) {
+                    if (start2 && end2)
                         GPUDEBUG("SetMemoryFill into non VRAM not suported\r\n");
                 } else {
-                    u32 size = gpu_GetSizeOfWidth((width >> 16) & 0xFFFF);
-                    u32 k;
-                    for(k = addr2; k < addrend2; k += size) {
-                        s32 m;
-                        for (m = size - 1; m >= 0; m--)
-                            VRAM_MemoryBuff[m + (k - 0x1F000000)] = (u8)(val2 >> (m * 8));
+                    u32 size = gpu_BytesPerPixel(control2);
+                    for(u32 k = start2; k < end2; k += size) {
+                        for (s32 m = size - 1; m >= 0; m--)
+                            VRAM_MemoryBuff[m + (k - 0x1F000000)] = (u8)(value2 >> (m * 8));
                     }
                 }
                 gpu_SendInterruptToAll(0);
-                break;
+	            break;
             }
+
             case GSP_ID_SET_DISPLAY_TRANSFER:
-            {
+			{
+
                     gpu_SendInterruptToAll(4);
 
+                    u32 inpaddr = *(u32*)(base_addr + (j + 1) * 0x20 + 0x4);
+                    u32 outputaddr = *(u32*)(base_addr + (j + 1) * 0x20 + 0x8);
+					u32 input_size = *(u32*)(base_addr + (j + 1) * 0x20 + 0xC);
+                    u32 output_size = *(u32*)(base_addr + (j + 1) * 0x20 + 0x10);
+                    u32 flags = *(u32*)(base_addr + (j + 1) * 0x20 + 0x14);
+                    u32 unk = *(u32*)(base_addr + (j + 1) * 0x20 + 0x18);
+					GPUDEBUG("GX SetDisplayTransfer 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X\r\n", inpaddr, outputaddr, input_size, output_size, flags, unk);
 
-                    u32 inpaddr, outputaddr, inputdim, outputdim, flags, unk;
-                    inpaddr = *(u32*)(base_addr + (j + 1) * 0x20 + 0x4);
-                    outputaddr = *(u32*)(base_addr + (j + 1) * 0x20 + 0x8);
-                    inputdim = *(u32*)(base_addr + (j + 1) * 0x20 + 0xC);
-                    outputdim = *(u32*)(base_addr + (j + 1) * 0x20 + 0x10);
-                    flags = *(u32*)(base_addr + (j + 1) * 0x20 + 0x14);
-                    unk = *(u32*)(base_addr + (j + 1) * 0x20 + 0x18);
-                    GPUDEBUG("GX SetDisplayTransfer 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X\r\n", inpaddr, outputaddr, inputdim, outputdim, flags, unk);
+					cmd.image_copy.in_buffer_address = inpaddr;
+					cmd.image_copy.out_buffer_address = outputaddr;
+					cmd.image_copy.in_buffer_size = input_size;
+					cmd.image_copy.out_buffer_size = output_size;
+					cmd.image_copy.flags = flags;
 
-                    u8 * inaddr = gpu_GetPhysicalMemoryBuff(gpu_ConvertVirtualToPhysical(inpaddr));
-                    u8 * outaddr = gpu_GetPhysicalMemoryBuff(gpu_ConvertVirtualToPhysical(outputaddr));
+					GPUDEBUG("Flags=%u\n", cmd.image_copy.flags);
 
-                    u32 rely = (inputdim & 0xFFFF);
-                    u32 relx = ((inputdim >> 0x10) & 0xFFFF);
+                    u8* src_pointer = gpu_GetPhysicalMemoryBuff(gpu_ConvertVirtualToPhysical(inpaddr));
+                    u8* dst_pointer = gpu_GetPhysicalMemoryBuff(gpu_ConvertVirtualToPhysical(outputaddr));
 
-                    u32 outy = (outputdim & 0xFFFF);
-                    u32 outx = ((outputdim >> 0x10) & 0xFFFF);
+                    u32 config_output_width = (output_size & 0xFFFF);
+                    u32 config_output_height = ((output_size >> 0x10) & 0xFFFF);
 
-                    if(inputdim != outputdim) {
-                        /*FILE *test = fopen("Conversion.bin", "wb");
-                        u32 len = 0;
-                        switch(flags & 0x700)
-                        {
-                            case 0: //RGBA8
-                                len = rely * relx * 4;
-                                break;
-                            case 0x100: //RGB8
-                                len = rely * relx * 3;
-                                break;
-                            case 0x200: //RGB565
-                            case 0x300: //RGB5A1
-                            case 0x400: //RGBA4
-                                len = rely * relx * 2;
-                                break;
-                        }
-                        fwrite(inaddr, 1, len, test);
-                        fclose(test);*/
+                    u32 config_input_width = (input_size & 0xFFFF);
+                    u32 config_input_height = ((input_size >> 0x10) & 0xFFFF);
 
-                        //Lets just skip the first 80*240*bytesperpixel or so as its blank then continue as usual
-                        switch(flags & 0x700)
-                        {
-                            case 0: //RGBA8
-                                inaddr += outy * abs(relx - outx) * 4;
-                                break;
-                            case 0x100: //RGB8
-                                inaddr += outy * abs(relx - outx) * 3;
-                                break;
-                            case 0x200: //RGB565
-                            case 0x300: //RGB5A1
-                            case 0x400: //RGBA4
-                                inaddr += outy * abs(relx - outx) * 2;
-                                break;
-                        }
-                        //GPUDEBUG("error converting from %08x to %08x\n", inputdim, outputdim);
-                        //break;
+
+                    u32 config_flip_vertically = (flags & 1);
+                    u32 config_output_tiled = (flags >> 1) & 1;
+                    u32 config_raw_copy = (flags >> 3) & 1;
+                    u32 config_input_format = (flags >> 0x8) & 5;
+                    u32 config_output_format = (flags >> 0x12) & 5;
+
+                    u32 config_scaling = (flags >> 24) & 3;
+
+                    u32 config_NoScale = 0;
+                    u32 config_ScaleX  = 1;
+                    u32 config_ScaleXY = 2;
+
+                    bool horizontal_scale = config_scaling != config_NoScale;
+                    bool vertical_scale = config_scaling == config_ScaleXY;
+
+                    u32 output_width = config_output_width >> horizontal_scale;
+                    u32 output_height = config_output_height >> vertical_scale;
+
+                    u32 input_size_ = config_input_width * config_input_height * gpu_BytesPerPixel(config_input_format);
+                    u32 output_size_ = output_width * output_height * gpu_BytesPerPixel(config_output_format);
+
+					GPUDEBUG("Flip vertically=%u\n", config_flip_vertically);
+                    GPUDEBUG("Scaling mode=%u\n", config_scaling);
+					GPUDEBUG("DisplayTriggerTransfer: 0x%08x bytes from 0x%08x(%ux%u)-> 0x%08x(%ux%u), dst format %x\n",
+						config_output_height * output_width * gpu_BytesPerPixel(config_output_format),
+						inpaddr, config_input_width, config_input_height,
+						outputaddr, output_width, output_height,
+						config_output_format);
+
+                    if (config_raw_copy) {
+                        // Raw copies do not perform color conversion nor tiled->linear / linear->tiled conversions
+                        // TODO(Subv): Verify if raw copies perform scaling
+                        GPUDEBUG("Raw copies called\n");
+                        memcpy(dst_pointer, src_pointer, output_size_);
+
+                        gpu_SendInterruptToAll(4);
                     }
 
-                    if((flags & 0x700) == ((flags & 0x7000) >> 4))
-                    {
-                        u32 len = 0;
-                        switch(flags & 0x700)
-                        {
-                            case 0: //RGBA8
-                                len = rely * relx * 4;
-                                break;
-                            case 0x100: //RGB8
-                                len = rely * relx * 3;
-                                break;
-                            case 0x200: //RGB565
-                            case 0x300: //RGB5A1
-                            case 0x400: //RGBA4
-                                len = rely * relx * 2;
-                                break;
+                                            
+                    for (u32 y = 0; y < output_height; ++y) {
+                        for (u32 x = 0; x < output_width; ++x) {
+                            clov4 src_color;
+
+                             // Calculate the [x,y] position of the input image
+                             // based on the current output position and the scale
+                            u32 input_x = x << horizontal_scale;
+                            u32 input_y = y << vertical_scale;
+
+
+                        if (config_flip_vertically) {
+                            // Flip the y value of the output data,
+                            // we do this after calculating the [x,y] position of the input image
+                            // to account for the scaling options.
+                            GPUDEBUG("Flip vertically called\n");
+                            y = output_height - y - 1;
                         }
-                        GPUDEBUG("copying %d (width %d/%d, height %d/%d)\n", len, relx, outx, rely, outy);
-                        memcpy(outaddr, inaddr, len);
+
+                        u32 dst_bytes_per_pixel = gpu_BytesPerPixel(config_output_format);
+                        u32 src_bytes_per_pixel = gpu_BytesPerPixel(config_input_format);
+                        u32 src_offset;
+                        u32 dst_offset;
+
+                    if (config_output_tiled == 1) {
+                        // Interpret the input as linear and the output as tiled
+                        u32 coarse_y = y & ~7;
+                        u32 stride = output_width * dst_bytes_per_pixel;
+
+                        src_offset = (input_x + input_y * config_input_width) * src_bytes_per_pixel;
+                        dst_offset = GetMortonOffset(x, y, dst_bytes_per_pixel) + coarse_y * stride;
+                        GPUDEBUG("Output tiled called\n");
+
+                    } else {
+                        // Interpret the input as tiled and the output as linear
+                        u32 coarse_y = input_y & ~7;
+                        u32 stride = config_input_width * src_bytes_per_pixel;
+
+                        src_offset = GetMortonOffset(input_x, input_y, src_bytes_per_pixel) + coarse_y * stride;
+                        dst_offset = (x + y * output_width) * dst_bytes_per_pixel;
                     }
-                    else
-                    {
-                        GPUDEBUG("converting %d to %d (width %d/%d, height %d/%d)\n", (flags & 0x700) >> 8, (flags & 0x7000) >> 12, relx, outx, rely, outy);
-                        Color color;
-                        
-                        for(u32 y = 0; y < outy; ++y)
-                        {
-                            for(u32 x = 0; x < outx; ++x) 
-                            {
-                                switch(flags & 0x700) { //input format
 
-                                    case 0: //RGBA8
-                                        color_decode(inaddr, RGBA8, &color);
-                                        inaddr += 4;
-                                        break;
-                                    case 0x100: //RGB8
-                                        color_decode(inaddr, RGB8, &color);
-                                        inaddr += 3;
-                                        break;
-                                    case 0x200: //RGB565
-                                        color_decode(inaddr, RGB565, &color);
-                                        inaddr += 2;
-                                        break;
-                                    case 0x300: //RGB5A1
-                                        color_decode(inaddr, RGBA5551, &color);
-                                        inaddr += 2;
-                                        break;
-                                    case 0x400: //RGBA4
-                                        color_decode(inaddr, RGBA4, &color);
-                                        inaddr += 2;
-                                        break;
-                                    default:
-                                        GPUDEBUG("error unknown input format %04X\n", flags & 0x700);
-                                        break;
-                                }
-                                //write it back
-
-                                switch(flags & 0x7000) { //output format
-
-                                    case 0: //RGBA8
-                                        color_encode(&color, RGBA8, outaddr);
-                                        outaddr += 4;
-                                        break;
-                                    case 0x1000: //RGB8
-                                        color_encode(&color, RGB8, outaddr);
-                                        outaddr += 3;
-                                        break;
-                                    case 0x2000: //RGB565
-                                        color_encode(&color, RGB565, outaddr);
-                                        outaddr += 2;
-                                        break;
-                                    case 0x3000: //RGB5A1
-                                        color_encode(&color, RGBA5551, outaddr);
-                                        outaddr += 2;
-                                        break;
-                                    case 0x4000: //RGBA4
-                                        color_encode(&color, RGBA4, outaddr);
-                                        outaddr += 2;
-                                        break;
-                                    default:
-                                        GPUDEBUG("error unknown output format %04X\n", flags & 0x7000);
-                                        break;
-                                }
-
-                            }
-                        }
+                    const u8* src_pixel = src_pointer + src_offset;
+                    src_color = DecodePixel(config_input_format, src_pixel);
+                    if (config_scaling == config_ScaleX) {
+                        clov4 pixel = DecodePixel(config_input_format, src_pixel + src_bytes_per_pixel);
+                        src_color.v[0] = ((src_color.v[0] + pixel.v[0]) / 2);
+                        src_color.v[1] = ((src_color.v[1] + pixel.v[1]) / 2);
+                        src_color.v[2] = ((src_color.v[2] + pixel.v[2]) / 2);
+                        src_color.v[3] = ((src_color.v[3] + pixel.v[3]) / 2);
+                    } else if (config_scaling == config_ScaleXY) {
+                        clov4 pixel1 = DecodePixel(config_input_format, src_pixel + 1 * src_bytes_per_pixel);
+                        clov4 pixel2 = DecodePixel(config_input_format, src_pixel + 2 * src_bytes_per_pixel);
+                        clov4 pixel3 = DecodePixel(config_input_format, src_pixel + 3 * src_bytes_per_pixel);
+                        src_color.v[0] = (((src_color.v[0] + pixel1.v[0]) + (pixel2.v[0] + pixel3.v[0])) / 4);
+                        src_color.v[1] = (((src_color.v[1] + pixel1.v[1]) + (pixel2.v[1] + pixel3.v[1])) / 4);
+						src_color.v[2] = (((src_color.v[2] + pixel1.v[2]) + (pixel2.v[2] + pixel3.v[2])) / 4);
+						src_color.v[3] = (((src_color.v[3] + pixel1.v[3]) + (pixel2.v[3] + pixel3.v[3])) / 4);
                     }
+
+                    u8* dst_pixel = dst_pointer + dst_offset;
+                    switch (config_output_format) {
+					case 0: //RGBA8
+                        EncodeRGBA8(src_color, dst_pixel);
+                        break;
+
+					case 1: //RGB8
+                        EncodeRGB8(src_color, dst_pixel);
+                        break;
+
+					case 2: //RGB565
+                        EncodeRGB565(src_color, dst_pixel);
+                        break;
+
+					case 3: //RGB5A1
+                        EncodeRGB5A1(src_color, dst_pixel);
+                        break;
+
+					case 4: //RGBA4
+                        EncodeRGBA4(src_color, dst_pixel);
+                        break;
+
+                    default:
+                        GPUDEBUG("Unknown destination framebuffer format %x", config_output_format);
+                        break;
+                    }
+
+                    }
+                }
+					GPUDEBUG("DisplayTriggerTransfer: 0x%08x bytes from 0x%08x(%ux%u)-> 0x%08x(%ux%u), dst format %x\n",
+						config_output_height * output_width * gpu_BytesPerPixel(config_output_format),
+						inpaddr, config_input_width, config_input_height,
+						outputaddr, output_width, output_height,
+						config_output_format);
                     gpu_UpdateFramebuffer();
                     break;
                 }
+
             case GSP_ID_SET_TEXTURE_COPY: {
                 gpu_SendInterruptToAll(1);
-                u32 inpaddr, outputaddr /*,size*/, inputdim, outputdim, flags;
+                u32 inpaddr, outputaddr /*,size*/, output_size, input_size, flags;
                 inpaddr = *(u32*)(base_addr + (j + 1) * 0x20 + 0x4);
                 outputaddr = *(u32*)(base_addr + (j + 1) * 0x20 + 0x8);
                 u32 size = *(u32*)(base_addr + (j + 1) * 0x20 + 0xC);
-                inputdim = *(u32*)(base_addr + (j + 1) * 0x20 + 0x10);
-                outputdim = *(u32*)(base_addr + (j + 1) * 0x20 + 0x14);
+                output_size = *(u32*)(base_addr + (j + 1) * 0x20 + 0x10);
+                input_size = *(u32*)(base_addr + (j + 1) * 0x20 + 0x14);
                 flags = *(u32*)(base_addr + (j + 1) * 0x20 + 0x18);
-                GPUDEBUG("GX SetTextureCopy 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X --todo--\r\n", inpaddr, outputaddr, size, inputdim, outputdim, flags);
+                GPUDEBUG("GX SetTextureCopy 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X --todo--\r\n", inpaddr, outputaddr, size, output_size, input_size, flags);
 
                 gpu_UpdateFramebuffer();
                 //goto theother; //untill I know what is the differnece
@@ -322,7 +384,11 @@ void gsp_ExecuteCommandFromSharedMem()
                 break;
             }
             default:
-                GPUDEBUG("GX cmd 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X\r\n", *(u32*)(base_addr + (j + 1) * 0x20), *(u32*)((base_addr + (j + 1) * 0x20) + 0x4), *(u32*)((base_addr + (j + 1) * 0x20) + 0x8), *(u32*)((base_addr + (j + 1) * 0x20) + 0xC), *(u32*)((base_addr + (j + 1) * 0x20) + 0x10), *(u32*)((base_addr + (j + 1) * 0x20) + 0x14), *(u32*)((base_addr + (j + 1) * 0x20) + 0x18), *(u32*)((base_addr + (j + 1) * 0x20)) + 0x1C);
+                GPUDEBUG("GX cmd 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X 0x%08X\r\n",
+                        *(u32*)(base_addr + (j + 1) * 0x20), *(u32*)((base_addr + (j + 1) * 0x20) + 0x4),
+                        *(u32*)((base_addr + (j + 1) * 0x20) + 0x8), *(u32*)((base_addr + (j + 1) * 0x20) + 0xC), 
+                        *(u32*)((base_addr + (j + 1) * 0x20) + 0x10), *(u32*)((base_addr + (j + 1) * 0x20) + 0x14),
+                        *(u32*)((base_addr + (j + 1) * 0x20) + 0x18), *(u32*)((base_addr + (j + 1) * 0x20)) + 0x1C);
                 break;
             }
         }
@@ -506,14 +572,37 @@ SERVICE_CMD(0x40080) // ReadHWRegs
     }
 
     if(ret == 0) {
-        u32 i;
-        for (i = 0; i < length; i += 4)
+        for (u32 i = 0; i < length; i += 4)
             mem_Write32((u32)(outaddr + i), gpu_ReadReg32((u32)(addr + i)));
     }
 
     RESP(1, ret);
     return 0;
 }
+
+
+//FrameBufferInfo info;
+
+//info.active_fb
+
+
+
+/*
+
+SERVICE_CMD(0x50200) // SetBufferSwap
+{
+    u32 screen = CMD(1);
+	GPUDEBUG("SetBufferSwap screen=%08x\n", screen);
+
+	FrameBufferInfo* fb_info = (FrameBufferInfo*)CMD(2);
+    SetBufferSwap(screen, *fb_info);
+
+    screen_RenderGPU(); //display new stuff
+	RESP(1, 0); // No error
+    return 0;
+}
+
+*/
 
 SERVICE_CMD(0x50200) // SetBufferSwap
 {
@@ -536,6 +625,8 @@ SERVICE_CMD(0x50200) // SetBufferSwap
     RESP(1, 0);
     return 0;
 }
+
+
 
 SERVICE_CMD(0x80082) // FlushDataCache
 {
@@ -615,27 +706,26 @@ SERVICE_END();
 
 
 /*
-0 = PSC0 private?
-1 = PSC1 private?
-2 = PDC0 public?
-3 = PDC1 public?
-4 = PPF  private?
-5 = P3D  private?
-6 = DMA  private?
+0 = PSC0
+1 = PSC1
+2 = PDC0
+3 = PDC1
+4 = PPF
+5 = P3D
+6 = DMA
 
 PDC0 called every line?
 PDC1 called every VBlank?
 */
 void gpu_SendInterruptToAll(u32 ID)
 {
-    int i;
-    dsp_sync_soundinter(0); //this is not correct but it patches all games that wait for this
+    dsp_sync_soundinterupt(0); //this is not correct but it patches all games that wait for this
     handleinfo* h = handle_Get(trigevent);
     if (h == NULL) {
         return;
     }
     h->locked = false; //unlock we are fast
-    for (i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++) {
         u8 next = *(u8*)(GSP_SharedBuff + i * 0x40);        //0x33 next is 00
         u8 inuse = *(u8*)(GSP_SharedBuff + i * 0x40 + 1);
         next += inuse;

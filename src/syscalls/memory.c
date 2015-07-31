@@ -311,7 +311,7 @@ u32 svcMapMemoryBlock()
     if(h->type == HANDLE_TYPE_SHAREDMEM) {
         switch (h->subtype) {
         case MEM_TYPE_GSP_0:
-            mem_AddMappingShared(addr, GSP_Shared_Buff_Size, GSP_SharedBuff);
+			mem_AddMappingShared(addr, GSP_SHARED_BUFF_SIZE, GSP_SharedBuff);
             break;
         case MEM_TYPE_HID_0:
             mem_AddMappingShared(addr, 0x2000, HIDsharedbuff);

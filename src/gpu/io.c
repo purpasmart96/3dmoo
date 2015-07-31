@@ -1,7 +1,13 @@
+
+
 #include "util.h"
+#include "gpu.h"
+#include "color.h"
 
 #define MAX_IO_REGS 0x420000
 static u32 io_regs[MAX_IO_REGS/4];
+Regs g_regs;
+#define GPU_REG_INDEX_WORKAROUND(field_name, backup_workaround_index) (backup_workaround_index)
 
 
 void gpu_WriteReg32(u32 addr, u32 data)
@@ -19,8 +25,12 @@ void gpu_WriteReg32(u32 addr, u32 data)
         return;
     }
 
-    io_regs[addr/4] = data;
+
+	u32 index = addr / 4;
+	io_regs[index] = (u32)data;
 }
+
+
 
 
 u32 gpu_ReadReg32(u32 addr)
@@ -32,5 +42,6 @@ u32 gpu_ReadReg32(u32 addr)
         return 0;
     }
 
-    return io_regs[addr/4];
+	u32 index = addr / 4;
+    return io_regs[index];
 }

@@ -243,8 +243,8 @@ unsigned long long last_one = 0;
 
 void threads_Execute()
 {
-    const int frame_cycles = 268123480 / 60;
-    const int frame_ticks = frame_cycles / 3;
+    const int frame_cycles = 268123480ull / 60;
+    const int frame_ticks = frame_cycles;
     u64 last_line_ticks = 0;
 
 #ifdef PROPER_THREADING
