@@ -127,8 +127,10 @@ extern u32 GPU_Regs[0xFFFF];
 
 #define GL_TEX_ENV             0xC0
 
-#define FOG_COLOR              0xE0
+#define TEX_ENV_BUF_INPUT      0xE0
 #define FOG_LUT_DATA           0xE8
+
+#define TEX_ENV_BUF_COLOR      0xFD
 
 #define COLOR_OP               0x100
 #define BLEND_FUNC             0x101

@@ -58,6 +58,11 @@ typedef struct {
 } vec3;
 
 typedef struct {
+	int v[3];
+} vec3_int;
+
+
+typedef struct {
     float x, y;
 } vec2;
 
