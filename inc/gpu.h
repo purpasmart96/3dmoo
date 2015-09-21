@@ -21,6 +21,15 @@
 
 #include "vec4.h"
 
+#define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
+#define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
+
+#define CLAMP( X, MIN, MAX )  ( (X)<(MIN) ? (MIN) : ((X)>(MAX) ? (MAX) : (X)) )
+
+// Minimum and maximum of three values
+#define MIN3( A, B, C ) ((A) < (B) ? MIN(A, C) : MIN(B, C))
+#define MAX3( A, B, C ) ((A) > (B) ? MAX(A, C) : MAX(B, C))
+
 /* Commands for gsp shared-mem. */
 #define GSP_ID_REQUEST_DMA          0
 #define GSP_ID_SET_CMDLIST          1
@@ -77,49 +86,78 @@ extern u32 GPU_Regs[0xFFFF];
 
 #define TRIGGER_IRQ 0x10
 
-#define CULL_MODE  0x40
-#define VIEWPORT_WIDTH 0x41
-#define VIEWPORT_WIDTH2 0x42
-#define VIEWPORT_HEIGHT 0x43
-#define VIEWPORT_HEIGHT2 0x44
+#define CULL_MODE             0x40
+#define VIEWPORT_WIDTH        0x41
+#define VIEWPORT_WIDTH2       0x42
+#define VIEWPORT_HEIGHT       0x43
+#define VIEWPORT_HEIGHT2      0x44
 
-#define GLViewport 0x68
-#define Viewport_depth_range 0x4D
-#define Viewport_depth_far_plane 0x4E
+#define DEPTH_SCALE           0x4D
+#define DEPTH_OFFSET          0x4E
+
+#define SCISSOR_TEST_MODE     0x65
+#define SCISSOR_TEST_POS      0x66
+#define SCISSOR_TEST_DIM      0x67
+#define GL_VIEWPORT           0x68
 
 #define VS_VertexAttributeOutputMap 0x50
 // untill 0x56
 
-#define TEXTURING_SETINGS    0x80
-#define TEXTURE_CONFIG0_SIZE 0x82
-#define TEXTURE_CONFIG0_WRAP 0x83
-#define TEXTURE_CONFIG0_ADDR 0x85
-#define TEXTURE_CONFIG0_TYPE 0x8E
 
-#define TEXTURE_CONFIG1_SIZE 0x92
-#define TEXTURE_CONFIG1_WRAP 0x93
-#define TEXTURE_CONFIG1_ADDR 0x95
-#define TEXTURE_CONFIG1_TYPE 0x96
+#define TEXTURE_UNITS_CONFIG  0x80
+#define TEXTURE0_BORDER_COLOR 0x81
+#define TEXTURE0_SIZE         0x82
+#define TEXTURE0_WRAP_FILTER  0x83
+#define TEXTURE0_LOD          0x84
+#define TEXTURE0_ADDR1        0x85
+#define TEXTURE0_ADDR2        0x86
+#define TEXTURE0_ADDR3        0x87
+#define TEXTURE0_ADDR4        0x88
+#define TEXTURE0_ADDR5        0x89
+#define TEXTURE0_ADDR6        0x8A
+#define TEXTURE0_SHADOW       0x8B
+#define TEXTURE0_TYPE         0x8E
 
-#define TEXTURE_CONFIG2_SIZE 0x9A
-#define TEXTURE_CONFIG2_WRAP 0x9B
-#define TEXTURE_CONFIG2_ADDR 0x9D
-#define TEXTURE_CONFIG2_TYPE 0x9E
+#define TEXTURE1_BORDER_COLOR 0x91
+#define TEXTURE1_SIZE         0x92
+#define TEXTURE1_WRAP_FILTER  0x93
+#define TEXTURE1_LOD          0x94
+#define TEXTURE1_ADDR         0x95
+#define TEXTURE1_TYPE         0x96
 
-#define GLTEXENV 0xC0
-// untill 0x100 with a jump at 0xE0- 0xF0
-#define COLOR_OUTPUT_CONFIG 0x100
-#define BLEND_CONFIG 0x101
-#define COLOR_LOGICOP_CONFIG 0x102
-#define BLEND_COLOR 0x103
-#define ALPHATEST_CONFIG 0x104
+#define TEXTURE2_BORDER_COLOR 0x99
+#define TEXTURE2_SIZE         0x9A
+#define TEXTURE2_WRAP_FILTER  0x9B
+#define TEXTURE2_LOD          0x9C
+#define TEXTURE2_ADDR         0x9D
+#define TEXTURE2_TYPE         0x9E
 
-#define DEPTHTEST_CONFIG 0x107
-#define DEPTH_FORMAT 0x116
-#define BUFFER_FORMAT 0x117
 
-#define DEPTHBUFFER_ADDRESS 0x11C
-#define COLORBUFFER_ADDRESS 0x11D
+#define GL_TEX_ENV             0xC0
+
+#define TEX_ENV_BUF_INPUT      0xE0
+#define FOG_LUT_DATA           0xE8
+
+#define TEX_ENV_BUF_COLOR      0xFD
+
+#define COLOR_OP               0x100
+#define BLEND_FUNC             0x101
+#define LOGIC_OP               0x102
+#define BLEND_COLOR            0x103
+#define ALPHA_TEST             0x104
+#define STENCIL_TEST           0x105
+#define STENCIL_OP             0x106
+#define DEPTH_COLOR_MASK       0x107
+
+#define COLOR_BUFFER_READ      0x112
+#define COLOR_BUFFER_WRITE     0x113
+#define DEPTH_STENCIL_READ     0x114
+#define DEPTH_STENCIL_WRITE    0x115
+#define DEPTH_BUFFER_FORMAT    0x116
+#define COLOR_BUFFER_FORMAT    0x117
+
+#define DEPTH_BUFFER_ADDRESS   0x11C
+#define COLOR_BUFFER_ADDRESS   0x11D
 
 #define Framebuffer_FORMAT11E  0x11E
 
@@ -193,14 +231,14 @@ extern u32 GPU_Regs[0xFFFF];
 struct OutputVertex {
 
     // VS output attributes
-    struct vec4 position;
-    struct vec4 dummy; // quaternions (not implemented, yet)
-    struct vec4 color;
-    struct vec2 texcoord0;
-    struct vec2 texcoord1;
+    vec4 position;
+    vec4 dummy; // quaternions (not implemented, yet)
+    vec4 color;
+    vec2 texcoord0;
+    vec2 texcoord1;
     float       texcoord0_w;
-    struct vec3 View;
-    struct vec2 texcoord2;
+    vec3 View;
+    vec2 texcoord2;
 
     // Padding for optimal alignment
     float pad[10];
@@ -208,16 +246,11 @@ struct OutputVertex {
     // Attributes used to store intermediate results
 
     // position after perspective divide
-    struct vec3 screenpos;
+    vec3 screenpos;
 };
 
-struct clov4 {
-    u8 v[5];
-};
-
-struct clov3 {
-    u8 v[5];
-};
+u32 GetColorMultiplier(u8 color_scale);
+u32 GetAlphaMultiplier(u8 alpha_scale);
 
 void gpu_Init();
 void gpu_WriteReg32(u32 addr, u32 data);

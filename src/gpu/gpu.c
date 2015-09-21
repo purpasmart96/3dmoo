@@ -74,6 +74,17 @@ u32 gpu_ConvertVirtualToPhysical(u32 addr) //todo
     return 0;
 }
 
+u32 GetColorMultiplier(u8 color_scale)
+{
+    return (color_scale < 3) ? (1 << color_scale) : 1;
+}
+
+u32 GetAlphaMultiplier(u8 alpha_scale)
+{
+    return (alpha_scale < 3) ? (1 << alpha_scale) : 1;
+}
+
+
 u32 gpu_GetSizeOfWidth(u16 val) //this is the size of pixel
 {
     switch (val&0x7000) { //check this
@@ -173,7 +184,7 @@ struct VertexShaderState {
     //status		1				2		RW		1
 
     float* input_register_table[16];
-    struct vec4  temporary_registers[16];
+    vec4  temporary_registers[16];
     u8  address_registers[3]; //loop is also a address_registers
     bool boolean_registers[16];
     u8 integer_registers[4][3];
@@ -196,7 +207,7 @@ struct VertexShaderState {
     struct Stack loop_end_stack;
 };
 
-struct vec4 const_vectors[96];
+vec4 const_vectors[96];
 
 static u32 getattribute_register_map(u32 reg, u32 data1, u32 data2)
 {
@@ -971,7 +982,7 @@ void ProcessShaderCode(struct VertexShaderState* state)
 
 }
 
-void RunShader(struct vec4 input[17], int num_attributes, struct OutputVertex *ret)
+void RunShader(vec4 input[17], int num_attributes, struct OutputVertex *ret)
 {
     struct VertexShaderState state;
 
@@ -1039,15 +1050,15 @@ void RunShader(struct vec4 input[17], int num_attributes, struct OutputVertex *r
     for (int i = 0; i < 16; i++) {
         for (int j = 0; j < 4; j++)state.temporary_registers[i].v[j] = (0.f);
     }
-    ret->texcoord0.v[0] = 0.f;
-    ret->texcoord0.v[1] = 0.f;
+    ret->texcoord0.x = 0.f;
+    ret->texcoord0.y = 0.f;
 
     ProcessShaderCode(&state);
 
     GPUDEBUG("Output vertex: pos (%.2f, %.2f, %.2f, %.2f), col(%.2f, %.2f, %.2f, %.2f), tc0(%.2f, %.2f)\n",
              ret->position.v[0], ret->position.v[1], ret->position.v[2], ret->position.v[3],
              ret->color.v[0], ret->color.v[1], ret->color.v[2], ret->color.v[3],
-             ret->texcoord0.v[0], ret->texcoord0.v[1]);
+             ret->texcoord0.x, ret->texcoord0.y);
 
     //return ret;
 }
@@ -1149,7 +1160,7 @@ void gpu_WriteID(u16 ID, u8 mask, u32 size, u32* buffer)
             }
 
             // Initialize data for the current vertex
-            struct vec4 input[17];
+            vec4 input[17];
             u8 NumTotalAttributes = (attribute_config[2] >> 28) + 1;
             for (int i = 0; i < NumTotalAttributes; i++) {
                 for (u32 comp = 0; comp < vertex_attribute_elements[i]; comp++) {

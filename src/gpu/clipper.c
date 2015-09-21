@@ -28,24 +28,43 @@
 void InitScreenCoordinates(struct OutputVertex *vtx)
 {
     struct {
-        float halfsize_x;
-        float offset_x;
-        float halfsize_y;
-        float offset_y;
-        float zscale;
-        float offset_z;
+        int corner_x;
+        int corner_y;
+        float width;
+        float height;
     } viewport;
-    f24to32(GPU_Regs[VIEWPORT_WIDTH], &viewport.halfsize_x);
-    f24to32(GPU_Regs[VIEWPORT_HEIGHT], &viewport.halfsize_y);
-    viewport.offset_x = 1.0f * (GPU_Regs[GLViewport]&0xFFFF);
-    viewport.offset_y = 1.0f * ((GPU_Regs[GLViewport] >> 16) & 0xFFFF);
-    f24to32(GPU_Regs[Viewport_depth_range], &viewport.zscale);
-    f24to32(GPU_Regs[Viewport_depth_far_plane], &viewport.offset_z);
 
-    // TODO: Not sure why the viewport width needs to be divided by 2 but the viewport height does not
-    vtx->screenpos.v[0] = (vtx->position.v[0] / vtx->position.v[3] + 1.0f) * viewport.halfsize_x + viewport.offset_x;
-    vtx->screenpos.v[1] = (vtx->position.v[1] / vtx->position.v[3] + 1.0f) * viewport.halfsize_y + viewport.offset_y;
-    vtx->screenpos.v[2] = viewport.offset_z + vtx->position.v[2] / vtx->position.v[3] * viewport.zscale;
+    struct {
+        float scale;
+        float offset;
+    } depthmap;
+
+    viewport.corner_x = 1.0 * (GPU_Regs[GL_VIEWPORT] & 0xFFFF);
+    viewport.corner_y = 1.0 * ((GPU_Regs[GL_VIEWPORT] >> 16) & 0xFFFF);
+    f24to32(GPU_Regs[VIEWPORT_WIDTH], &viewport.width);
+    f24to32(GPU_Regs[VIEWPORT_HEIGHT], &viewport.height);
+
+    f24to32(GPU_Regs[DEPTH_SCALE], &depthmap.scale);
+    f24to32(GPU_Regs[DEPTH_OFFSET], &depthmap.offset);
+
+    float inv_w = (1.f) / vtx->position.v[3];
+    vtx->color.v[0] *= inv_w;
+    vtx->color.v[1] *= inv_w;
+    vtx->color.v[2] *= inv_w;
+    vtx->color.v[3] *= inv_w;
+
+    vtx->texcoord0.x *= inv_w;
+    vtx->texcoord0.y *= inv_w;
+    vtx->texcoord1.x *= inv_w;
+    vtx->texcoord1.y *= inv_w;
+    vtx->texcoord2.x *= inv_w;
+    vtx->texcoord2.y *= inv_w;
+    vtx->position.v[3] = inv_w;
+
+	// TODO: Not sure why the viewport width needs to be divided by 2 but the viewport height does not
+    vtx->screenpos.x = (vtx->position.v[0] + inv_w + 1.0f) * viewport.width + viewport.corner_x;
+    vtx->screenpos.y = (vtx->position.v[1] + inv_w + 1.0f) * viewport.height + viewport.corner_y;
+    vtx->screenpos.z = depthmap.offset + vtx->position.v[2] * inv_w * depthmap.scale;
 }
 
 #define max_vertices 10
@@ -60,7 +79,7 @@ struct OutputVertex buffer_b[max_vertices];
 
 //#define edgesnumb 8
 #define edgesnumb 7
-const struct vec4 edges[edgesnumb] = {
+vec4 edges[edgesnumb] = {
     { one, zero, zero, -one }, 
     { -one, zero, zero, -one },
     { zero, one, zero, -one },
@@ -71,7 +90,7 @@ const struct vec4 edges[edgesnumb] = {
     //{ zero, zero, zero, EPSILON } //this is not how it works at last some times
 };
 
-bool PointIsOnLine(struct vec4* vLineStart, struct vec4* vLineEnd, struct vec4* vPoint)
+bool PointIsOnLine(vec4* vLineStart, vec4* vLineEnd, vec4* vPoint)
 {
     float fSX;
     float fSY;
@@ -96,16 +115,16 @@ bool PointIsOnLine(struct vec4* vLineStart, struct vec4* vLineEnd, struct vec4* 
     output.color.v[1] = v0.color.v[1] * (1.f - factor) + v1.color.v[1] * factor;                              \
     output.color.v[2] = v0.color.v[2] * (1.f - factor) + v1.color.v[2] * factor;                              \
     output.color.v[3] = v0.color.v[3] * (1.f - factor) + v1.color.v[3] * factor;                              \
-    output.texcoord0.v[0] = v0.texcoord0.v[0] * (1.f - factor) + v1.texcoord0.v[0] * factor;                  \
-    output.texcoord0.v[1] = v0.texcoord0.v[1] * (1.f - factor) + v1.texcoord0.v[1] * factor;                  \
-    output.texcoord1.v[0] = v0.texcoord1.v[0] * (1.f - factor) + v1.texcoord1.v[0] * factor;                  \
-    output.texcoord1.v[1] = v0.texcoord1.v[1] * (1.f - factor) + v1.texcoord1.v[1] * factor;                  \
+    output.texcoord0.x = v0.texcoord0.x * (1.f - factor) + v1.texcoord0.x * factor;                  \
+    output.texcoord0.y = v0.texcoord0.y * (1.f - factor) + v1.texcoord0.y * factor;                  \
+    output.texcoord1.x = v0.texcoord1.x * (1.f - factor) + v1.texcoord1.x * factor;                  \
+    output.texcoord1.y = v0.texcoord1.y * (1.f - factor) + v1.texcoord1.y * factor;                  \
     output.texcoord0_w = v0.texcoord0_w * (1.f - factor) + v1.texcoord0_w * factor;                           \
-    output.View.v[0] = v0.View.v[0] * (1.f - factor) + v1.View.v[0] * factor;                                 \
-    output.View.v[1] = v0.View.v[1] * (1.f - factor) + v1.View.v[1] * factor;                                 \
-    output.View.v[2] = v0.View.v[2] * (1.f - factor) + v1.View.v[2] * factor;                                 \
-    output.texcoord2.v[0] = v0.texcoord2.v[0] * (1.f - factor) + v1.texcoord2.v[0] * factor;                  \
-    output.texcoord2.v[1] = v0.texcoord2.v[1] * (1.f - factor) + v1.texcoord2.v[1] * factor;
+    output.View.x = v0.View.x * (1.f - factor) + v1.View.x * factor;                                 \
+    output.View.y = v0.View.y * (1.f - factor) + v1.View.y * factor;                                 \
+    output.View.z = v0.View.z * (1.f - factor) + v1.View.z * factor;                                 \
+    output.texcoord2.x = v0.texcoord2.x * (1.f - factor) + v1.texcoord2.x * factor;                  \
+    output.texcoord2.y = v0.texcoord2.y * (1.f - factor) + v1.texcoord2.y * factor;
 
 #define GetIntersection(v0, v1,edge,output)                                                                                        \
     float dp = (v0.position.v[0] * edge.v[0] + v0.position.v[1] * edge.v[1] + v0.position.v[2] * edge.v[2] + v0.position.v[3] * edge.v[3]); /*DOT*/    \
@@ -179,13 +198,13 @@ void Clipper_ProcessTriangle(struct OutputVertex *v0, struct OutputVertex *v1, s
                 vtx0->position.v[0],  vtx0->position.v[1],  vtx0->position.v[2], vtx0->position.v[3],
                 vtx1->position.v[0],  vtx1->position.v[1],  vtx1->position.v[2], vtx1->position.v[3],
                 vtx2->position.v[0],  vtx2->position.v[1],  vtx2->position.v[2], vtx2->position.v[3],
-                vtx0->screenpos.v[0], vtx0->screenpos.v[1], vtx0->screenpos.v[2],
-                vtx1->screenpos.v[0], vtx1->screenpos.v[1], vtx1->screenpos.v[2],
-                vtx2->screenpos.v[0], vtx2->screenpos.v[1], vtx2->screenpos.v[2]);
+                vtx0->screenpos.x, vtx0->screenpos.y, vtx0->screenpos.z,
+                vtx1->screenpos.x, vtx1->screenpos.y, vtx1->screenpos.z,
+                vtx2->screenpos.x, vtx2->screenpos.y, vtx2->screenpos.z);
             rasterizer_ProcessTriangle(vtx0, vtx1, vtx2);
 
             //HACK
-            rasterizer_ProcessTriangle(vtx2, vtx1, vtx0);
+            //rasterizer_ProcessTriangle(vtx2, vtx1, vtx0);
         }
     }
 }
