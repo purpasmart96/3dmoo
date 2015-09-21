@@ -32,17 +32,16 @@ struct vec3_12P4 {
 };
 
 
-typedef struct {
-
+typedef struct
+{
     clov4 combiner_output;
-	clov4 combiner_constant;
+    clov4 combiner_constant;
     clov4 combiner_buffer;
-	clov4 primary_color;
-	clov4 texture_color[4];
-	clov4 dest;
-	u16 x;
-	u16 y;
-
+    clov4 primary_color;
+    clov4 texture_color[4];
+    clov4 dest;
+    u16 x;
+    u16 y;
 } RasterState;
 
 RasterState state;
@@ -399,7 +398,7 @@ clov3 ColorCombine(u32 op, clov3 input[3])
 
 	case 2: // Add
     {
-		vec3_int result;
+        vec3_int result;
         result.v[0] = input[0].v[0] + input[1].v[0];
         result.v[1] = input[0].v[1] + input[1].v[1];
         result.v[2] = input[0].v[2] + input[1].v[2];
@@ -584,7 +583,7 @@ static clov3 LookupFactorRGB(BlendFactor factor)
         output.v[0] = output.v[1] = output.v[2] = 255 - (GPU_Regs[BLEND_COLOR] >> 24);
         break;
 
-	default:
+    default:
         DEBUG("Unknown color blend factor %x\n", factor);
         break;
     }
@@ -616,7 +615,7 @@ static u8 LookupFactorA(BlendFactor factor)
 
     default:
         DEBUG("Unknown alpha blend factor %x\n", factor);
-		return 0;
+        return 0;
     }
 }
 
@@ -1172,26 +1171,26 @@ const clov4 LookupTexture(const u8* source, int x, int y, const TextureFormat fo
 }
 
 static u16 FracMask()
-{ 
+{
     return 0xF;
 }
 
 static u16 IntMask()
-{ 
-    return (u16)~0xF; 
+{
+    return (u16)~0xF;
 }
 
 static s16 FloatToFix(float flt)
 {
-	// TODO: Rounding here is necessary to prevent garbage pixels at
-	//       triangle borders. Is it that the correct solution, though?
-	return ((s16)(roundf(flt * 16.0f)));
+    // TODO: Rounding here is necessary to prevent garbage pixels at
+    //       triangle borders. Is it that the correct solution, though?
+    return ((s16)(roundf(flt * 16.0f)));
 }
 
 vec3_Fix12P4 ScreenToRasterizerCoordinates(vec3 vec)
 {
-	vec3_Fix12P4 m = { FloatToFix(vec.x), FloatToFix(vec.y), FloatToFix(vec.z) };
-	return m;
+    vec3_Fix12P4 m = { FloatToFix(vec.x), FloatToFix(vec.y), FloatToFix(vec.z) };
+    return m;
 }
 
 void rasterizer_ProcessTriangle(struct OutputVertex * v0,
@@ -1207,15 +1206,15 @@ void rasterizer_ProcessTriangle(struct OutputVertex * v0,
         ScreenToRasterizerCoordinates(v0->screenpos),
         ScreenToRasterizerCoordinates(v1->screenpos),
         ScreenToRasterizerCoordinates(v2->screenpos),
-	};
+    };
 
     // TODO: Proper scissor rect test!
 
     if ((GPU_Regs[CULL_MODE] & 0x3) == 1) { //KeepClockWise
         // Reverse vertex order and use the CW code path.
-		memcpy(&vtxpostemp, &vtxpos[2], sizeof(vec3_Fix12P4));
-		memcpy(&vtxpos[2], &vtxpos[1], sizeof(vec3_Fix12P4));
-		memcpy(&vtxpos[1], &vtxpostemp, sizeof(vec3_Fix12P4));
+        memcpy(&vtxpostemp, &vtxpos[2], sizeof(vec3_Fix12P4));
+        memcpy(&vtxpos[2], &vtxpos[1], sizeof(vec3_Fix12P4));
+        memcpy(&vtxpos[1], &vtxpostemp, sizeof(vec3_Fix12P4));
 
         vtemp = v2;
         v2 = v1;
@@ -1223,7 +1222,7 @@ void rasterizer_ProcessTriangle(struct OutputVertex * v0,
     }
     if ((GPU_Regs[CULL_MODE] & 0x3) != 0) { //mode KeepCounterClockWise or undefined        // Cull away triangles which are wound counter-clockwise.
         // TODO: Make work :(
-		if (orient2d(vtxpos[0].x, vtxpos[0].y, vtxpos[1].x, vtxpos[1].y, vtxpos[2].x, vtxpos[2].y) <= 0)
+        if (orient2d(vtxpos[0].x, vtxpos[0].y, vtxpos[1].x, vtxpos[1].y, vtxpos[2].x, vtxpos[2].y) <= 0)
         {
 			memcpy(&vtxpostemp, &vtxpos[2], sizeof(vec3_Fix12P4));
 			memcpy(&vtxpos[2], &vtxpos[1], sizeof(vec3_Fix12P4));
@@ -1238,9 +1237,9 @@ void rasterizer_ProcessTriangle(struct OutputVertex * v0,
         // TODO: Consider A check for degenerate triangles ("SignedArea == 0")
         if (orient2d(vtxpos[0].x, vtxpos[0].y, vtxpos[1].x, vtxpos[1].y, vtxpos[2].x, vtxpos[2].y) <= 0)
         {
-			memcpy(&vtxpostemp, &vtxpos[2], sizeof(vec3_Fix12P4));
-			memcpy(&vtxpos[2], &vtxpos[1], sizeof(vec3_Fix12P4));
-			memcpy(&vtxpos[1], &vtxpostemp, sizeof(vec3_Fix12P4));
+            memcpy(&vtxpostemp, &vtxpos[2], sizeof(vec3_Fix12P4));
+            memcpy(&vtxpos[2], &vtxpos[1], sizeof(vec3_Fix12P4));
+            memcpy(&vtxpos[1], &vtxpostemp, sizeof(vec3_Fix12P4));
 
             vtemp = v2;
             v2 = v1;
@@ -1269,7 +1268,7 @@ void rasterizer_ProcessTriangle(struct OutputVertex * v0,
     for (u16 y = min_y + 8; y < max_y; y += 0x10) {
         for (u16 x = min_x + 8; x < max_x; x += 0x10) {
 
-			int w0 = bias0 + orient2d(vtxpos[1].x, vtxpos[1].y, vtxpos[2].x, vtxpos[2].y, x, y );
+            int w0 = bias0 + orient2d(vtxpos[1].x, vtxpos[1].y, vtxpos[2].x, vtxpos[2].y, x, y );
             int w1 = bias1 + orient2d(vtxpos[2].x, vtxpos[2].y, vtxpos[0].x, vtxpos[0].y, x, y );
             int w2 = bias2 + orient2d(vtxpos[0].x, vtxpos[0].y, vtxpos[1].x, vtxpos[1].y, x, y );
             int wsum = w0 + w1 + w2;
@@ -1297,26 +1296,26 @@ void rasterizer_ProcessTriangle(struct OutputVertex * v0,
             state.primary_color.v[2] = (u8)(GetInterpolatedAttribute(v0->color.v[2], v1->color.v[2], v2->color.v[2], v0, v1, v2, (float)w0, (float)w1, (float)w2) * 255.f);
             state.primary_color.v[3] = (u8)(GetInterpolatedAttribute(v0->color.v[3], v1->color.v[3], v2->color.v[3], v0, v1, v2, (float)w0, (float)w1, (float)w2) * 255.f);
 
-			vec2 uv[3];
-			uv[0].x = GetInterpolatedAttribute(v0->texcoord0.x, v1->texcoord0.x, v2->texcoord0.x, v0, v1, v2, (float)w0, (float)w1, (float)w2);
-			uv[0].y = GetInterpolatedAttribute(v0->texcoord0.y, v1->texcoord0.y, v2->texcoord0.y, v0, v1, v2, (float)w0, (float)w1, (float)w2);
-			uv[1].x = GetInterpolatedAttribute(v0->texcoord1.x, v1->texcoord1.x, v2->texcoord1.x, v0, v1, v2, (float)w0, (float)w1, (float)w2);
-			uv[1].y = GetInterpolatedAttribute(v0->texcoord1.y, v1->texcoord1.y, v2->texcoord1.y, v0, v1, v2, (float)w0, (float)w1, (float)w2);
-			uv[2].x = GetInterpolatedAttribute(v0->texcoord2.x, v1->texcoord2.x, v2->texcoord2.x, v0, v1, v2, (float)w0, (float)w1, (float)w2);
-			uv[2].y = GetInterpolatedAttribute(v0->texcoord2.y, v1->texcoord2.y, v2->texcoord2.y, v0, v1, v2, (float)w0, (float)w1, (float)w2);
+            vec2 uv[3];
+            uv[0].x = GetInterpolatedAttribute(v0->texcoord0.x, v1->texcoord0.x, v2->texcoord0.x, v0, v1, v2, (float)w0, (float)w1, (float)w2);
+            uv[0].y = GetInterpolatedAttribute(v0->texcoord0.y, v1->texcoord0.y, v2->texcoord0.y, v0, v1, v2, (float)w0, (float)w1, (float)w2);
+            uv[1].x = GetInterpolatedAttribute(v0->texcoord1.x, v1->texcoord1.x, v2->texcoord1.x, v0, v1, v2, (float)w0, (float)w1, (float)w2);
+            uv[1].y = GetInterpolatedAttribute(v0->texcoord1.y, v1->texcoord1.y, v2->texcoord1.y, v0, v1, v2, (float)w0, (float)w1, (float)w2);
+            uv[2].x = GetInterpolatedAttribute(v0->texcoord2.x, v1->texcoord2.x, v2->texcoord2.x, v0, v1, v2, (float)w0, (float)w1, (float)w2);
+            uv[2].y = GetInterpolatedAttribute(v0->texcoord2.y, v1->texcoord2.y, v2->texcoord2.y, v0, v1, v2, (float)w0, (float)w1, (float)w2);
 
             for (int i = 0; i < 3; ++i) {
-				if (GPU_Regs[TEXTURE_UNITS_CONFIG] & (0x1 << i)) {
+                if (GPU_Regs[TEXTURE_UNITS_CONFIG] & (0x1 << i)) {
                     u8* texture_data = NULL;
                     switch (i) {
                     case 0:
                         texture_data = (u8*)(gpu_GetPhysicalMemoryBuff(GPU_Regs[TEXTURE0_ADDR1] << 3));
                         break;
                     case 1:
-						texture_data = (u8*)(gpu_GetPhysicalMemoryBuff(GPU_Regs[TEXTURE1_ADDR] << 3));
+                        texture_data = (u8*)(gpu_GetPhysicalMemoryBuff(GPU_Regs[TEXTURE1_ADDR] << 3));
                         break;
                     case 2:
-						texture_data = (u8*)(gpu_GetPhysicalMemoryBuff(GPU_Regs[TEXTURE2_ADDR] << 3));
+                        texture_data = (u8*)(gpu_GetPhysicalMemoryBuff(GPU_Regs[TEXTURE2_ADDR] << 3));
                         break;
                     }
 
@@ -1331,14 +1330,14 @@ void rasterizer_ProcessTriangle(struct OutputVertex * v0,
                     switch (i) {
                     case 0:
                         height = (GPU_Regs[TEXTURE0_SIZE] & 0xFFFF);
-                        width =  (GPU_Regs[TEXTURE0_SIZE] >> 16) & 0xFFFF;
+                        width  = (GPU_Regs[TEXTURE0_SIZE] >> 16) & 0xFFFF;
                         wrap_t = (GPU_Regs[TEXTURE0_WRAP_FILTER] >> 8) & 3;
                         wrap_s = (GPU_Regs[TEXTURE0_WRAP_FILTER] >> 12) & 3;
                         format =  GPU_Regs[TEXTURE0_TYPE] & 0xF;
                         break;
                     case 1:
                         height = (GPU_Regs[TEXTURE1_SIZE] & 0xFFFF);
-                        width =  (GPU_Regs[TEXTURE1_SIZE] >> 16) & 0xFFFF;
+                        width  = (GPU_Regs[TEXTURE1_SIZE] >> 16) & 0xFFFF;
                         wrap_t = (GPU_Regs[TEXTURE1_WRAP_FILTER] >> 8) & 3;
                         wrap_s = (GPU_Regs[TEXTURE1_WRAP_FILTER] >> 12) & 3;
                         format =  GPU_Regs[TEXTURE1_TYPE] & 0xF;
@@ -1383,7 +1382,7 @@ void rasterizer_ProcessTriangle(struct OutputVertex * v0,
                     texture_color[i].v[2] = source_ptr[0];
                     texture_color[i].v[3] = 0xFF;*/
 
-					state.texture_color[i] = LookupTexture(texture_data, s, t, format, row_stride, width, height, false);
+                    state.texture_color[i] = LookupTexture(texture_data, s, t, format, row_stride, width, height, false);
 
                     /*FILE *f = fopen("test.bin", "wb");
                     fwrite(texture_data, 1, 0x400000, f);
@@ -1467,7 +1466,7 @@ void rasterizer_ProcessTriangle(struct OutputVertex * v0,
                 //}
             }
 
-			if (GPU_Regs[ALPHA_TEST] & 1)
+            if (GPU_Regs[ALPHA_TEST] & 1)
             {
                 bool pass = false;
 
@@ -1575,7 +1574,7 @@ void rasterizer_ProcessTriangle(struct OutputVertex * v0,
 			clov4 blend_output = state.combiner_output;
 
             //Alpha blending
-			if ((GPU_Regs[COLOR_OP] >> 8) & 1) //Alpha blending enabled
+            if ((GPU_Regs[COLOR_OP] >> 8) & 1) //Alpha blending enabled
             {
                 u32 factor_source_rgb = (GPU_Regs[BLEND_FUNC] >> 16) & 0xF;
                 u32 factor_source_a   = (GPU_Regs[BLEND_FUNC] >> 24) & 0xF;
